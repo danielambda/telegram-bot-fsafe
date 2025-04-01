@@ -16,13 +16,24 @@
 
 module Main where
 
-import Telegram.Bot.FSAfe
+import Telegram.Bot.FSAfe.Start (getEnvToken, hoistStartKeyedBot_)
+import Telegram.Bot.FSAfe.BotContextParser (callbackQueryDataRead, command, runBotContextParser)
+import Telegram.Bot.FSAfe.BotM (BotM, MonadBot(..))
+import Telegram.Bot.FSAfe.FSA (IsState(..), IsTransition(..), SomeTransitionFrom(..), FSAfeM)
+import Telegram.Bot.FSAfe.Reply
+  ( asCallbackButton, editUpdateMessage, reply, replyText, toEditMessage, toReplyMessage
+  , EditMessage(editMessageReplyMarkup), ReplyMessage(replyMessageReplyMarkup),
+  )
+
+import Telegram.Bot.API as Tg (updateChatId, InlineKeyboardMarkup(..), SomeReplyMarkup(..))
 import Control.Monad.Trans (MonadTrans (lift))
 import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.Reader (ReaderT (..), MonadReader (..), asks)
 import Control.Applicative ((<|>))
-import Telegram.Bot.API as Tg
 import qualified Data.Text as T
+
+tshow :: Show a => a -> T.Text
+tshow = T.pack . show
 
 data PizzaOrder
   = PizzaOrder
@@ -36,10 +47,10 @@ data PizzaContext
   , availableToppings :: [Topping]
   }
 
-data PizzaSize = Small | Medium | Large
+data PizzaSize = ExtraSmall | Small | Medium | Large | ExtraLarge
   deriving (Show, Read, Eq, Enum, Bounded)
 
-data Topping = Cheese | Pepperoni | Mushrooms | Olives
+data Topping = Cheese | Pepperoni | Mushrooms | Olives | Pineapples
   deriving (Show, Read, Eq, Enum, Bounded)
 
 allValues :: (Enum a, Bounded a) => [a]
@@ -95,8 +106,8 @@ instance IsTransition StartSelectingSize 'InitialState 'SelectingSize0 where
   handleTransition StartSelectingSize InitialStateD{} = do
     availableSizes <- asks availableSizes
     reply $ (toReplyMessage "Please, select size of your pizza:")
-      { replyMessageReplyMarkup = Just $ Tg.SomeInlineKeyboardMarkup $ Tg.InlineKeyboardMarkup $
-          [(\s -> asCallbackButton (T.pack $ show s) (SelectSize s)) <$> availableSizes]
+      { replyMessageReplyMarkup = Just $ Tg.SomeInlineKeyboardMarkup $ Tg.InlineKeyboardMarkup
+          [(\s -> asCallbackButton (tshow s) (SelectSize s)) <$> availableSizes]
       }
     return SelectingSize0D
 
@@ -104,9 +115,9 @@ newtype SelectSize = SelectSize PizzaSize deriving (Show, Read)
 instance IsTransition SelectSize 'SelectingSize0 'SelectingSize where
   handleTransition (SelectSize size) SelectingSize0D{} = do
     availableSizes <- asks availableSizes
-    editUpdateMessage $ (toEditMessage $ "You selected " <> T.pack (show size) <> " size")
+    editUpdateMessage $ (toEditMessage $ "You selected " <> tshow size <> " size")
       { editMessageReplyMarkup = Just $ Tg.SomeInlineKeyboardMarkup $ Tg.InlineKeyboardMarkup $
-          ((\s -> asCallbackButton (T.pack $ show s) (SelectSize s)) <$> (filter (/= size) availableSizes))
+          ((\s -> asCallbackButton (tshow s) (SelectSize s)) <$> filter (/= size) availableSizes)
           :[[asCallbackButton "Confirm" Confirm]]
       }
     return $ SelectingSizeD size
@@ -114,9 +125,9 @@ instance IsTransition SelectSize 'SelectingSize0 'SelectingSize where
 instance IsTransition SelectSize 'SelectingSize 'SelectingSize where
   handleTransition (SelectSize size) SelectingSizeD{} = do
     availableSizes <- asks availableSizes
-    editUpdateMessage $ (toEditMessage $ "You selected " <> T.pack (show size) <> " size")
+    editUpdateMessage $ (toEditMessage $ "You selected " <> tshow size <> " size")
       { editMessageReplyMarkup = Just $ Tg.SomeInlineKeyboardMarkup $ Tg.InlineKeyboardMarkup $
-          ((\s -> asCallbackButton (T.pack $ show s) (SelectSize s)) <$> (filter (/= size) availableSizes))
+          ((\s -> asCallbackButton (tshow s) (SelectSize s)) <$> filter (/= size) availableSizes)
           :[[asCallbackButton "Confirm" Confirm]]
       }
     return $ SelectingSizeD size
@@ -124,9 +135,9 @@ instance IsTransition SelectSize 'SelectingSize 'SelectingSize where
 instance IsTransition Confirm 'SelectingSize 'SelectingToppings where
   handleTransition Confirm (SelectingSizeD size) = do
     availableToppings <- asks availableToppings
-    editUpdateMessage $ (toEditMessage $ "Please, select toppings for your pizza:")
+    editUpdateMessage $ (toEditMessage "Please, select toppings for your pizza:")
       { editMessageReplyMarkup = Just $ Tg.SomeInlineKeyboardMarkup $ Tg.InlineKeyboardMarkup $
-          ((\s -> asCallbackButton (T.pack $ show s) (AddTopping s)) <$> availableToppings)
+          ((\s -> asCallbackButton (tshow s) (AddTopping s)) <$> availableToppings)
           :[[asCallbackButton "Confirm" Confirm]]
       }
     return $ SelectingToppingsD size []
@@ -139,8 +150,8 @@ instance IsTransition AddTopping 'SelectingToppings 'SelectingToppings where
     editUpdateMessage $ (toEditMessage "Please, select toppings for your pizza:")
       { editMessageReplyMarkup = Just $ Tg.SomeInlineKeyboardMarkup $ Tg.InlineKeyboardMarkup $
           ((\s -> (if s `elem` toppings'
-            then asCallbackButton ("✓" <> T.pack (show s)) (RemoveTopping s)
-            else asCallbackButton (T.pack $ show s) (AddTopping s))
+            then asCallbackButton ("✓" <> tshow s) (RemoveTopping s)
+            else asCallbackButton (tshow s) (AddTopping s))
            ) <$> availableToppings
           ):[[asCallbackButton "Confirm" Confirm]]
       }
@@ -154,8 +165,8 @@ instance IsTransition RemoveTopping 'SelectingToppings 'SelectingToppings where
     editUpdateMessage $ (toEditMessage "Please, select toppings for your pizza:")
       { editMessageReplyMarkup = Just $ Tg.SomeInlineKeyboardMarkup $ Tg.InlineKeyboardMarkup $
           ((\s -> (if s `elem` toppings'
-            then asCallbackButton ("✓" <> T.pack (show s)) (RemoveTopping s)
-            else asCallbackButton (T.pack $ show s) (AddTopping s))
+            then asCallbackButton ("✓" <> tshow s) (RemoveTopping s)
+            else asCallbackButton (tshow s) (AddTopping s))
            ) <$> availableToppings
           ):[[asCallbackButton "Confirm" Confirm]]
       }
@@ -163,19 +174,17 @@ instance IsTransition RemoveTopping 'SelectingToppings 'SelectingToppings where
 
 instance IsTransition Confirm 'SelectingToppings 'ConfirmingOrder where
   handleTransition Confirm SelectingToppingsD{..} = do
-    reply $ (toReplyMessage $ T.pack $ show PizzaOrder{..}){
-      replyMessageReplyMarkup = Just $ Tg.SomeInlineKeyboardMarkup $ Tg.InlineKeyboardMarkup $
+    editUpdateMessage $ (toEditMessage $ tshow PizzaOrder{..}){
+      editMessageReplyMarkup = Just $ Tg.SomeInlineKeyboardMarkup $ Tg.InlineKeyboardMarkup
         [[asCallbackButton "Confirm" Confirm]]
     }
     return $ ConfirmingOrderD PizzaOrder{..}
 
 instance IsTransition Confirm 'ConfirmingOrder 'InitialState where
   handleTransition Confirm (ConfirmingOrderD order) = do
-    editUpdateMessage $ toEditMessage $ T.pack $ show order
+    editUpdateMessage $ toEditMessage $ tshow order
     replyText "You can /start ordering another pizza!"
     return InitialStateD
-
-data Cancel = Cancel
 
 newtype AppM a = AppM { runAppM :: ReaderT PizzaContext BotM a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader PizzaContext)
@@ -188,12 +197,13 @@ type instance FSAfeM = AppM
 main :: IO ()
 main = do
   tgToken <- getEnvToken "TELEGRAM_BOT_TOKEN"
-  putStrLn ("bot is running" :: String)
+  putStrLn "bot is running"
   hoistStartKeyedBot_ nt updateChatId InitialStateD tgToken
   where
-    ctx = PizzaContext
-      { availableSizes = allValues
-      , availableToppings = allValues
-      }
     nt = flip runReaderT ctx . runAppM
+    ctx = PizzaContext
+      { availableSizes    = allValues `except` Small
+      , availableToppings = allValues `except` Pineapples
+      }
 
+    values `except` value = filter (/= value) values

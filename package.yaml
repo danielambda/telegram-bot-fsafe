@@ -3,7 +3,14 @@ version: 0.1.0.0
 library:
   source-dirs: src
   exposed-modules:
-    Telegram.Bot.FSAfe
+  - Telegram.Bot.FSAfe
+  - Telegram.Bot.FSAfe.BotContextParser
+  - Telegram.Bot.FSAfe.BotM
+  - Telegram.Bot.FSAfe.FSA
+  - Telegram.Bot.FSAfe.Reply
+  - Telegram.Bot.FSAfe.RunTG
+  - Telegram.Bot.FSAfe.Start
+  - Telegram.Bot.FSAfe.Start.Internal
 
   dependencies:
   - base
