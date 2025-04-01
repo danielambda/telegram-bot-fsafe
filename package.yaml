@@ -26,7 +26,7 @@ library:
 executables:
   telegram-bot-fsafe-example:
     main: Main.hs
-    source-dirs: examples
+    source-dirs: example
     dependencies:
     - telegram-bot-fsafe
     - telegram-bot-api

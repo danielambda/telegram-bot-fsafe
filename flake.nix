@@ -20,6 +20,7 @@
           hPkgs.ghcid
           hPkgs.haskell-language-server
           pkgs.stack
+          hPkgs.cabal-install
 
           pkgs.dhall-lsp-server
           pkgs.zlib
