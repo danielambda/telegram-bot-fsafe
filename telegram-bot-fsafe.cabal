@@ -1,0 +1,60 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.37.0.
+--
+-- see: https://github.com/sol/hpack
+
+name:           telegram-bot-fsafe
+version:        0.1.0.0
+license:        MIT
+license-file:   LICENSE
+build-type:     Simple
+
+library
+  exposed-modules:
+      Telegram.Bot.FSAfe
+  other-modules:
+      Telegram.Bot.FSAfe.BotContextParser
+      Telegram.Bot.FSAfe.BotM
+      Telegram.Bot.FSAfe.FSA
+      Telegram.Bot.FSAfe.Reply
+      Telegram.Bot.FSAfe.RunTG
+      Telegram.Bot.FSAfe.Start
+      Telegram.Bot.FSAfe.Start.Internal
+      Paths_telegram_bot_fsafe
+  hs-source-dirs:
+      src
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
+  build-depends:
+      aeson
+    , aeson-pretty
+    , async
+    , base
+    , bytestring
+    , containers
+    , cron
+    , hashable
+    , mtl
+    , pretty-show
+    , servant-client
+    , stm
+    , telegram-bot-api
+    , text
+    , unordered-containers
+    , uuid
+  default-language: Haskell2010
+
+executable telegram-bot-fsafe-example
+  main-is: Main.hs
+  other-modules:
+      Paths_telegram_bot_fsafe
+  hs-source-dirs:
+      examples
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , mtl
+    , telegram-bot-api
+    , telegram-bot-fsafe
+    , text
+  default-language: Haskell2010

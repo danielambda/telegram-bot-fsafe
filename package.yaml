@@ -1,0 +1,51 @@
+name: telegram-bot-fsafe
+version: 0.1.0.0
+library:
+  source-dirs: src
+  exposed-modules:
+    Telegram.Bot.FSAfe
+
+  dependencies:
+  - base
+  - telegram-bot-api
+  - containers
+  - bytestring
+  - mtl
+  - uuid
+  - text
+  - servant-client
+  - aeson
+  - aeson-pretty
+  - pretty-show
+  - cron
+  - stm
+  - async
+  - unordered-containers
+  - hashable
+
+executables:
+  telegram-bot-fsafe-example:
+    main: Main.hs
+    source-dirs: examples
+    dependencies:
+    - telegram-bot-fsafe
+    - telegram-bot-api
+
+    - base
+    - mtl
+    - text
+
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+
+ghc-options:
+- -Wall
+- -Wcompat
+- -Widentities
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wmissing-home-modules
+- -Wpartial-fields
+- -Wredundant-constraints
