@@ -1,16 +1,12 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ExplicitForAll #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-} -- for FSAfeM type instance
 
@@ -74,7 +70,7 @@ instance IsState 'SelectingSize0 where
     $ SomeTransition <$> callbackQueryDataRead @SelectSize
 
 instance IsState 'SelectingSize where
-  data StateData 'SelectingSize = SelectingSizeD PizzaSize
+  newtype StateData 'SelectingSize = SelectingSizeD PizzaSize
   parseTransition SelectingSizeD{} = runBotContextParser
     $   SomeTransition <$> callbackQueryDataRead @SelectSize
     <|> SomeTransition <$> callbackQueryDataRead @Confirm
@@ -103,7 +99,7 @@ data Confirm = Confirm
 
 data StartSelectingSize = StartSelectingSize
 instance IsTransition StartSelectingSize 'InitialState 'SelectingSize0 where
-  handleTransition StartSelectingSize InitialStateD{} = do
+  handleTransition StartSelectingSize InitialStateD = do
     availableSizes <- asks availableSizes
     reply $ (toReplyMessage "Please, select size of your pizza:")
       { replyMessageReplyMarkup = Just $ Tg.SomeInlineKeyboardMarkup $ Tg.InlineKeyboardMarkup

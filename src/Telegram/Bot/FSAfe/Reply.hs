@@ -47,7 +47,7 @@ updateEditMessageId update
 
 -- | Reply message parameters.
 -- This is just like 'SendMessageRequest' but without 'SomeChatId' specified.
-data ReplyMessage = ReplyMessage -- rename to BotMessage and convert to a sum type
+data ReplyMessage = ReplyMessage -- TODO rename to BotMessage and convert to a sum type
   { replyMessageText                  :: Text -- ^ Text of the message to be sent.
   , replyMessageMessageThreadId       :: Maybe MessageThreadId -- ^ Unique identifier for the target message thread (topic) of the forum; for forum supergroups only.
   , replyMessageParseMode             :: Maybe ParseMode -- ^ Send 'MarkdownV2', 'HTML' or 'Markdown' (legacy), if you want Telegram apps to show bold, italic, fixed-width text or inline URLs in your bot's message.

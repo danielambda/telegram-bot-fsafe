@@ -21,27 +21,24 @@ library
       Telegram.Bot.FSAfe.Start
       Telegram.Bot.FSAfe.Start.Internal
   other-modules:
+      Telegram.Bot.FSAfe.DSL
+      Telegram.Bot.FSAfe.UndecidableInstances
       Paths_telegram_bot_fsafe
   hs-source-dirs:
       src
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       aeson
-    , aeson-pretty
     , async
     , base
     , bytestring
-    , containers
-    , cron
     , hashable
     , mtl
-    , pretty-show
     , servant-client
     , stm
     , telegram-bot-api
     , text
     , unordered-containers
-    , uuid
   default-language: Haskell2010
 
 executable telegram-bot-fsafe-example

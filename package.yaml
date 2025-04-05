@@ -15,16 +15,11 @@ library:
   dependencies:
   - base
   - telegram-bot-api
-  - containers
   - bytestring
   - mtl
-  - uuid
   - text
   - servant-client
   - aeson
-  - aeson-pretty
-  - pretty-show
-  - cron
   - stm
   - async
   - unordered-containers
