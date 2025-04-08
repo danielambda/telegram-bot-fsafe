@@ -11,24 +11,24 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Telegram.Bot.FSAfe.MessageContext
-  ( MessageContext(..)
+  ( MessageContext (..)
   , (.++)
-  , MessageContextHasEntry(..)
+  , MessageContextHasEntry (..)
+  , Tagged (..)
   ) where
 
 import Data.Tagged (Tagged (..))
 
 import Data.Kind (Type, Constraint)
-import Data.Proxy (Proxy (..))
-import GHC.TypeLits (Symbol, KnownSymbol, symbolVal, TypeError, ErrorMessage(..))
+import Data.Proxy (Proxy)
+import GHC.TypeLits (TypeError, ErrorMessage(..))
 
-type MessageContext :: [(Symbol, Type)] -> Type
+type MessageContext :: [(k, Type)] -> Type
 data MessageContext as where
   EmptyMsgCtx :: MessageContext '[]
   (:.) :: Tagged s a -> MessageContext as -> MessageContext ('(s, a) ': as)
@@ -37,11 +37,11 @@ infixr 5 :.
 
 instance Show (MessageContext '[]) where
   show EmptyMsgCtx = "EmptyMsgCtx"
-instance (KnownSymbol s, Show a, Show (MessageContext as))
+instance (Show a, Show (MessageContext as))
       => Show (MessageContext ('(s, a) ': as)) where
   showsPrec outerPrecedence (a :. as) =
     showParen (outerPrecedence > 5) $
-      showString ("\"" <> symbolVal (Proxy @s) <> "\" ") . shows a . showString " :. " . shows as
+      shows a . showString " :. " . shows as
 
 instance Eq (MessageContext '[]) where
   _ == _ = True
@@ -72,14 +72,14 @@ type family FromMaybe a maybea where
   FromMaybe a Nothing  = a
   FromMaybe _ (Just a) = a
 
-type MessageContextHasEntry :: [(Symbol, Type)] -> Symbol -> Constraint
+type MessageContextHasEntry :: [(k, Type)] -> k -> Constraint
 class MessageContextHasEntry ctx tag where
   getMessageContextEntry
     :: Proxy tag
     -> MessageContext ctx
     -> LookupOrError tag ctx
       (    Text "MessageContext " :<>: ShowType ctx
-      :<>: Text " does not contain tag " :<>: Text "\"" :<>: Text tag :<>: Text "\""
+      :<>: Text " does not contain tag " :<>: ShowType tag
       )
 
 instance {-# OVERLAPS #-}

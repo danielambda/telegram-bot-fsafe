@@ -177,6 +177,7 @@ instance IsTextLine (TxtLn (Var' :| '[])) where
   type TextLineData (TxtLn (Var' :| '[])) = T.Text
   fromTextLineData _ = id
 
+-- induction step with Txt
 instance (KnownSymbol s, IsTextLine (TxtLn (l :| ls)))
       => IsTextLine (TxtLn (Txt s :| l : ls)) where
   type TextLineData (TxtLn (Txt s :| l : ls)) = TextLineData (TxtLn (l :| ls))
@@ -184,6 +185,7 @@ instance (KnownSymbol s, IsTextLine (TxtLn (l :| ls)))
     =  T.pack (symbolVal $ Proxy @s)
     <> fromTextLineData (Proxy @(TxtLn (l:|ls))) tlData
 
+-- induction step with Txt
 instance IsTextLine (TxtLn (l :| ls))
       => IsTextLine (TxtLn (Var a :| l : ls)) where
   type TextLineData (TxtLn (Var a :| l : ls)) = (T.Text, TextLineData (TxtLn (l :| ls)))
