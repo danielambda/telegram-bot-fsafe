@@ -10,7 +10,6 @@ module Telegram.Bot.FSAfe.FSA
   , IsTransition(..), SomeTransitionFrom(..)
   ) where
 
-
 import Data.Kind (Type, Constraint)
 import Telegram.Bot.FSAfe.BotM (BotContext)
 

@@ -16,16 +16,22 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Telegram.Bot.FSAfe.MessageContext (MessageContext(..), (.++), getMessageContextEntry) where
+module Telegram.Bot.FSAfe.MessageContext
+  ( MessageContext(..)
+  , (.++)
+  , MessageContextHasEntry(..)
+  ) where
+
+import Data.Tagged (Tagged (..))
 
 import Data.Kind (Type, Constraint)
-import GHC.TypeLits (Symbol, KnownSymbol, symbolVal, TypeError, ErrorMessage(..))
 import Data.Proxy (Proxy (..))
+import GHC.TypeLits (Symbol, KnownSymbol, symbolVal, TypeError, ErrorMessage(..))
 
 type MessageContext :: [(Symbol, Type)] -> Type
 data MessageContext as where
   EmptyMsgCtx :: MessageContext '[]
-  (:.) :: (Proxy s, a) -> MessageContext as -> MessageContext ('(s, a) ': as)
+  (:.) :: Tagged s a -> MessageContext as -> MessageContext ('(s, a) ': as)
 
 infixr 5 :.
 
@@ -52,14 +58,14 @@ EmptyMsgCtx .++ a = a
 (a :. as) .++ b = a :. (as .++ b)
 
 type Lookup :: a -> [(a, b)] -> Maybe b
-type family Lookup key list where
-  Lookup key '[] = 'Nothing
-  Lookup key ('(key, a) : _) = Just a
-  Lookup key (_ : as) = Lookup key as
+type family Lookup tag list where
+  Lookup tag '[] = 'Nothing
+  Lookup tag ('(tag, a) : _) = Just a
+  Lookup tag (_ : as) = Lookup tag as
 
 type LookupOrError :: a -> [(a, b)] -> ErrorMessage -> b
-type family LookupOrError key list errorMessage where
-  LookupOrError key list e = FromMaybe (TypeError e) (Lookup key list)
+type family LookupOrError tag list errorMessage where
+  LookupOrError tag list e = FromMaybe (TypeError e) (Lookup tag list)
 
 type FromMaybe :: a -> Maybe a -> a
 type family FromMaybe a maybea where
@@ -67,23 +73,23 @@ type family FromMaybe a maybea where
   FromMaybe _ (Just a) = a
 
 type MessageContextHasEntry :: [(Symbol, Type)] -> Symbol -> Constraint
-class MessageContextHasEntry ctx key where
+class MessageContextHasEntry ctx tag where
   getMessageContextEntry
-    :: Proxy key
+    :: Proxy tag
     -> MessageContext ctx
-    -> LookupOrError key ctx
+    -> LookupOrError tag ctx
       (    Text "MessageContext " :<>: ShowType ctx
-      :<>: Text " does not contain key " :<>: Text "\"" :<>: Text key :<>: Text "\""
+      :<>: Text " does not contain tag " :<>: Text "\"" :<>: Text tag :<>: Text "\""
       )
 
 instance {-# OVERLAPS #-}
-         MessageContextHasEntry ('(key, a) : as) key where
-  getMessageContextEntry _ ((_, a) :. _) = a
+         MessageContextHasEntry ('(tag, a) : as) tag where
+  getMessageContextEntry _ ((Tagged a) :. _) = a
 
 -- I have no idea how this combination of equality constraints work here, by the way
 instance {-# OVERLAPPABLE #-}
-         ( MessageContextHasEntry as key
-         , Lookup key as ~ Lookup key ('(notKey, a) : as)
-         , Lookup key as ~ Just something
-         ) => MessageContextHasEntry ('(notKey, a) : as) key where
+         ( MessageContextHasEntry as tag
+         , Lookup tag as ~ Lookup tag ('(nottag, a) : as)
+         , Lookup tag as ~ Just something
+         ) => MessageContextHasEntry ('(nottag, a) : as) tag where
   getMessageContextEntry proxy (_ :. a) = getMessageContextEntry proxy a

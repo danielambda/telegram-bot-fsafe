@@ -15,6 +15,7 @@ library:
   dependencies:
   - base
   - telegram-bot-api
+  - tagged
   - mtl
   - text
   - servant-client

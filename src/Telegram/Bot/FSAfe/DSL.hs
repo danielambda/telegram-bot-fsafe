@@ -10,34 +10,24 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Telegram.Bot.FSAfe.DSL (mmyMessage, MyMessage) where
+module Telegram.Bot.FSAfe.DSL
+  ( ProperMessage(..), Message(..), Proper
+  , TextLine(..), TextEntity(..)
+  , ButtonLine(..), ButtonEntity(..)
+  , MessageLine(..)
+  , type (:|:), type (:\)
+  ) where
+
+import qualified Data.Text as T (Text, pack, unlines)
+import Telegram.Bot.API (InlineKeyboardButton, SomeReplyMarkup (..), InlineKeyboardMarkup (..))
 
 import Data.Kind (Type, Constraint)
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.Proxy (Proxy (..))
 import GHC.Base (Symbol)
 import GHC.TypeLits (KnownSymbol, symbolVal, TypeError, ErrorMessage(..))
-import Data.Proxy (Proxy (..))
-import Telegram.Bot.FSAfe (ReplyMessage (..), toReplyMessage)
-import qualified Data.Text as T
-import Telegram.Bot.API (InlineKeyboardButton, SomeReplyMarkup (..), InlineKeyboardMarkup (..))
-import Telegram.Bot.FSAfe.Reply (callbackButton)
 
-mmyMessage :: ReplyMessage
-mmyMessage = fromMessageData (Proxy @(Proper MyMessage)) undefined
-
-type MyMessage
-  =  MyTextMessage
-  \| MyKeyboard
-
-type MyTextMessage
-  =  "Hello, my dear " :|: Var "name" :|: "!"
-  \| "There are 5 buttons below"
-  \| Var "question"
-  \| Btn "Button"
-
-type MyKeyboard
-  =  Btn ""             :|: Btn ("My name is not" :|: Var "name")
-  \| Btn "Hello world"  :|: Btn "Aboba"
+import Telegram.Bot.FSAfe.Reply (ReplyMessage(..), toReplyMessage, callbackButton)
 
 data ProperMessage = PMsg (NonEmpty TextLine) [ButtonLine]
 
@@ -77,9 +67,9 @@ type family JoinMessageLines ml1 ml2 where
   JoinMessageLines (MTL tl1) (MTL tl2) = MTL (tl1 ++ tl2)
   JoinMessageLines (MBL bl1) (MBL bl2) = MBL (bl1 ++ bl2)
 
-infixl 0 \|
-type (\|) :: k -> l -> Message
-type a \| b = JoinMessages (AsMessage a) (AsMessage b)
+infixl 0 :\
+type (:\) :: k -> l -> Message
+type a :\ b = JoinMessages (AsMessage a) (AsMessage b)
 
 type JoinMessages :: Message -> Message -> Message
 type family JoinMessages m1 m2 where
