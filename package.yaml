@@ -16,7 +16,6 @@ library:
   - base
   - telegram-bot-api
   - first-class-families
-  - bytestring
   - mtl
   - text
   - servant-client
