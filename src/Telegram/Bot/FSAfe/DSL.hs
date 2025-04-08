@@ -15,14 +15,12 @@ module Telegram.Bot.FSAfe.DSL (mmyMessage, MyMessage) where
 import Data.Kind (Type, Constraint)
 import Data.List.NonEmpty (NonEmpty(..))
 import GHC.Base (Symbol)
-import GHC.TypeLits (AppendSymbol, KnownSymbol, symbolVal, TypeError, ErrorMessage(..))
+import GHC.TypeLits (KnownSymbol, symbolVal, TypeError, ErrorMessage(..))
 import Data.Proxy (Proxy (..))
 import Telegram.Bot.FSAfe (ReplyMessage (..), toReplyMessage)
 import qualified Data.Text as T
 import Telegram.Bot.API (InlineKeyboardButton, SomeReplyMarkup (..), InlineKeyboardMarkup (..))
 import Telegram.Bot.FSAfe.Reply (callbackButton)
-import Fcf.Class.Functor (Map)
-import Fcf.Core (Eval, Exp)
 
 mmyMessage :: ReplyMessage
 mmyMessage = fromMessageData (Proxy @(Proper MyMessage)) undefined
@@ -57,50 +55,48 @@ data ButtonEntity where
 
 data Message = Msg [[TextEntity]] [[ButtonEntity]]
 
-data MsgLine where
-  MsgTxtLn :: [TextEntity] -> MsgLine
-  MsgBtnLn :: [ButtonEntity] -> MsgLine
-
-type MTL a = MsgTxtLn a
-type MBL a = MsgBtnLn a
+data MessageLine where
+  MTL :: [TextEntity] -> MessageLine
+  MBL :: [ButtonEntity] -> MessageLine
 
 infixr 9 :|:
-type (:|:) :: k -> l -> MsgLine
-type family a :|: b where
-  MTL '[] :|: MTL '[] = MTL '[]
-  MBL '[] :|: MBL '[] = MBL '[]
+type (:|:) :: k -> l -> MessageLine
+type a :|: b = JoinMessageLines (AsMessageLine a) (AsMessageLine b)
 
-  (a :: Symbol) :|: (b :: Symbol) = MTL '[Txt (a <> b)]
-  (a :: Symbol) :|: Var b  = MTL '[Txt a, Var b]
-  (a :: Symbol) :|: MTL bs = MTL (Txt a:bs)
+type AsMessageLine :: k -> MessageLine
+type family AsMessageLine a where
+  AsMessageLine (MTL a) = MTL a
+  AsMessageLine (MBL a) = MBL a
+  AsMessageLine (a :: Symbol) = MTL '[Txt a]
+  AsMessageLine (Var a) = MTL '[Var a]
+  AsMessageLine (Btn a) = MBL '[Btn a]
+  AsMessageLine a = TypeError (Text "Cannot convert " :<>: ShowType a :<>: Text " to MessageLine")
 
-  Var a :|: (b :: Symbol) = MTL '[Var a, Txt b]
-  Var a :|: Var b = MTL '[Var a, Var b]
-
-  MTL as :|: (b :: Symbol) = MTL (as ++ '[Txt b])
-
-  Btn a :|: Btn b = MBL '[Btn a, Btn b]
-  Btn a :|: MBL '[] = MBL '[Btn a]
-  Btn a :|: MBL (b:bs) = MBL (Btn a : b:bs)
-  _ :|: _ = TypeError (Text "what are you doing with your :|:")
+type JoinMessageLines :: MessageLine -> MessageLine -> MessageLine
+type family JoinMessageLines ml1 ml2 where
+  JoinMessageLines (MTL tl1) (MTL tl2) = MTL (tl1 ++ tl2)
+  JoinMessageLines (MBL bl1) (MBL bl2) = MBL (bl1 ++ bl2)
 
 infixl 0 \|
 type (\|) :: k -> l -> Message
-type family a \| b where
-  Msg tls1 '[] \| Msg tls2 bls = Msg (tls1 ++ tls2) bls
-  Msg tls bls1 \| Msg '[] bls2 = Msg tls (bls1 ++ bls2)
-  Msg _ (_:_)  \| Msg (_:_) _  = TypeError (Text "Cannot have text below buttons")
-  a \| b = AsMsg a \| AsMsg b
+type a \| b = JoinMessages (AsMessage a) (AsMessage b)
 
-type AsMsg :: k -> Message
-type family AsMsg a where
-  AsMsg (Msg tls bls) = Msg tls bls
-  AsMsg (a :: Symbol) = Msg '[ '[Txt a]] '[]
-  AsMsg (Txt a)       = Msg '[ '[Txt a]] '[]
-  AsMsg (Var a)       = Msg '[ '[Var a]] '[]
-  AsMsg (Btn a)       = Msg '[]          '[ '[Btn a]]
-  AsMsg (MTL a)       = Msg '[a]         '[]
-  AsMsg (MBL a)       = Msg '[]          '[a]
+type JoinMessages :: Message -> Message -> Message
+type family JoinMessages m1 m2 where
+  JoinMessages (Msg tls1 '[]) (Msg tls2 bls) = Msg (tls1 ++ tls2) bls
+  JoinMessages (Msg tls bls1) (Msg '[] bls2) = Msg tls (bls1 ++ bls2)
+  JoinMessages (Msg _ (_:_))  (Msg (_:_) _)  = TypeError (Text "Cannot have text below buttons")
+
+type AsMessage :: k -> Message
+type family AsMessage a where
+  AsMessage (Msg tls bls) = Msg tls bls
+  AsMessage (a :: Symbol) = Msg '[ '[Txt a]] '[]
+  AsMessage (Txt a)       = Msg '[ '[Txt a]] '[]
+  AsMessage (Var a)       = Msg '[ '[Var a]] '[]
+  AsMessage (Btn a)       = Msg '[]          '[ '[Btn a]]
+  AsMessage (MTL a)       = Msg '[a]         '[]
+  AsMessage (MBL a)       = Msg '[]          '[a]
+  AsMessage a = TypeError (Text "Cannot convert " :<>: ShowType a :<>: Text " to Message")
 
 type Proper :: Message -> ProperMessage
 type family Proper msg where
@@ -109,14 +105,23 @@ type family Proper msg where
     (Eval (ProperTL tl) :| Eval (Map ProperTL tls))
     (Eval (Map ProperBL bls))
 
+-- TODO move this out to some module for first-class-families styled things
+type Exp a = a -> Type
+
+type Eval :: Exp a -> a
+type family Eval e
+
+data Map :: (a -> Exp b) -> [a] -> Exp [b]
+type instance Eval (Map _ '[]) = '[]
+type instance Eval (Map f (x:xs)) = Eval (f x) : Eval (Map f xs)
+--
+
 data ProperTL :: [TextEntity] -> Exp TextLine
 type instance Eval (ProperTL '[]) = TypeError (Text "TODO")
 type instance Eval (ProperTL (tl:tls)) = TxtLn (tl:|tls)
 
 data ProperBL :: [ButtonEntity] -> Exp ButtonLine
 type instance Eval (ProperBL a) = BtnLn a
-
-type a <> b = AppendSymbol a b
 
 infixl 1 ++
 type (++) :: f k -> f k -> f k

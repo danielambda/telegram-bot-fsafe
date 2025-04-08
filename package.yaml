@@ -15,7 +15,6 @@ library:
   dependencies:
   - base
   - telegram-bot-api
-  - first-class-families
   - mtl
   - text
   - servant-client
