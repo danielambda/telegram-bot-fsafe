@@ -21,7 +21,10 @@ library
       Telegram.Bot.FSAfe.Start
       Telegram.Bot.FSAfe.Start.Internal
   other-modules:
+      Telegram.Bot.FSAfe.Aboba
+      Telegram.Bot.FSAfe.Arbuz
       Telegram.Bot.FSAfe.DSL
+      Telegram.Bot.FSAfe.DSL2
       Telegram.Bot.FSAfe.UndecidableInstances
       Paths_telegram_bot_fsafe
   hs-source-dirs:
@@ -32,6 +35,7 @@ library
     , async
     , base
     , bytestring
+    , first-class-families
     , hashable
     , mtl
     , servant-client
