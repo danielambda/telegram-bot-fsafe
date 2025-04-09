@@ -18,6 +18,7 @@ module Telegram.Bot.FSAfe.DSL
   , TextLine(..), TextEntity(..)
   , ButtonLine(..), Button(..)
   , MessageLine(..)
+  , renderMessage
   , type (:|:), type (:\)
   ) where
 
@@ -110,6 +111,11 @@ type instance Eval (ProperTL (tl:tls)) = TxtLn (tl:|tls)
 
 data ProperBL :: [Button] -> Exp ButtonLine
 type instance Eval (ProperBL a) = BtnLn a
+
+renderMessage
+  :: forall msg ctx. (IsMessage (Proper msg) ctx)
+  => Proxy msg -> TaggedContext ctx -> ReplyMessage
+renderMessage _ = fromMessageData (Proxy @(Proper msg))
 
 type IsMessage :: ProperMessage -> [(Symbol, Type)] -> Constraint
 class All (TaggedContextHasEntry ctx) (MessageData a)
