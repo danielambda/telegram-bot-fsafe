@@ -4,7 +4,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
@@ -23,7 +22,7 @@ module Telegram.Bot.FSAfe.DSL
   ) where
 
 import qualified Data.Text as T (Text, pack, unlines)
-import Telegram.Bot.API (InlineKeyboardButton, SomeReplyMarkup (..), InlineKeyboardMarkup (..))
+import Telegram.Bot.API (InlineKeyboardButton, SomeReplyMarkup (..), InlineKeyboardMarkup (..), labeledInlineKeyboardButton)
 
 import Data.Kind (Type, Constraint)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -31,7 +30,7 @@ import Data.Proxy (Proxy (..))
 import GHC.Base (Symbol)
 import GHC.TypeLits (KnownSymbol, symbolVal, TypeError, ErrorMessage(..))
 
-import Telegram.Bot.FSAfe.Reply (ReplyMessage(..), toReplyMessage, callbackButton)
+import Telegram.Bot.FSAfe.Reply (ReplyMessage(..), toReplyMessage)
 import Telegram.Bot.FSAfe.TaggedContext (TaggedContext (..), TaggedContextHasEntry (..))
 import Telegram.Bot.FSAfe.FirstClassFamilies (Exp, Eval, Map, type (++))
 
@@ -46,7 +45,7 @@ data TextEntity where
 newtype ButtonLine = BtnLn [Button]
 
 data Button where
-  Btn :: k -> Button
+  LabelBtn :: TextLine -> Button
 
 data Message = Msg [[TextEntity]] [[Button]]
 
@@ -64,7 +63,7 @@ type family AsMessageLine a where
   AsMessageLine (MBL a) = MBL a
   AsMessageLine (a :: Symbol) = MTL '[Txt a]
   AsMessageLine (Var a) = MTL '[Var a]
-  AsMessageLine (Btn a) = MBL '[Btn a]
+  AsMessageLine (LabelBtn a) = MBL '[LabelBtn a]
   AsMessageLine a = TypeError (Text "Cannot convert " :<>: ShowType a :<>: Text " to MessageLine")
 
 type JoinMessageLines :: MessageLine -> MessageLine -> MessageLine
@@ -93,7 +92,7 @@ type family AsMessage a where
   AsMessage (a :: Symbol) = Msg '[ '[Txt a]] '[]
   AsMessage (Txt a)       = Msg '[ '[Txt a]] '[]
   AsMessage (Var a)       = Msg '[ '[Var a]] '[]
-  AsMessage (Btn a)       = Msg '[]          '[ '[Btn a]]
+  AsMessage (LabelBtn a)  = Msg '[]          '[ '[LabelBtn a]]
   AsMessage (MTL a)       = Msg '[a]         '[]
   AsMessage (MBL a)       = Msg '[]          '[a]
   AsMessage a = TypeError (Text "Cannot convert " :<>: ShowType a :<>: Text " to Message")
@@ -197,10 +196,15 @@ instance IsButtonLine (BtnLn '[]) ctx where
   type ButtonLineData (BtnLn '[]) = '[]
   fromButtonLineData _ _ = []
 
-instance IsButtonLine (BtnLn bl) ctx
-      => IsButtonLine (BtnLn (Btn b : bl)) ctx where
-  type ButtonLineData (BtnLn (Btn b : bl)) = ButtonLineData (BtnLn bl)
-  fromButtonLineData _ blData = let
-    btn = callbackButton (T.pack "") (T.pack "TODO add callback")
-    bl = fromButtonLineData (Proxy @(BtnLn bl)) blData
+instance ( IsButtonLine (BtnLn bl) ctx
+         , IsTextLine tl ctx
+         , All (TaggedContextHasEntry ctx) (ButtonLineData (BtnLn (LabelBtn tl : bl)))
+         )
+      => IsButtonLine (BtnLn (LabelBtn tl : bl)) ctx where
+  type ButtonLineData (BtnLn (LabelBtn tl : bl)) =
+    TextLineData tl ++ ButtonLineData (BtnLn bl)
+  fromButtonLineData _ ctx = let
+    label = fromTextLineData (Proxy @tl) ctx
+    btn = labeledInlineKeyboardButton label
+    bl = fromButtonLineData (Proxy @(BtnLn bl)) ctx
     in btn : bl
