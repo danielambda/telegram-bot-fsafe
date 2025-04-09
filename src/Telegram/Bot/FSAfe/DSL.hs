@@ -20,6 +20,7 @@ module Telegram.Bot.FSAfe.DSL
   , MessageLine(..)
   , renderMessage
   , type (:|:), type (:\)
+  , RenameTag
   ) where
 
 import qualified Data.Text as T (Text, pack, unlines)
@@ -33,7 +34,8 @@ import GHC.TypeLits (KnownSymbol, symbolVal, TypeError, ErrorMessage(..))
 
 import Telegram.Bot.FSAfe.Reply (ReplyMessage(..), toReplyMessage)
 import Telegram.Bot.FSAfe.TaggedContext (TaggedContext (..), TaggedContextHasEntry (..))
-import Telegram.Bot.FSAfe.FirstClassFamilies (Exp, Eval, Map, type (++))
+import Telegram.Bot.FSAfe.FirstClassFamilies (Exp, Eval, Map, type (++), type (==))
+import Data.Type.Bool (If)
 
 data ProperMessage = PMsg (NonEmpty TextLine) [ButtonLine]
 
@@ -116,6 +118,23 @@ renderMessage
   :: forall msg ctx. (IsMessage (Proper msg) ctx)
   => Proxy msg -> TaggedContext ctx -> ReplyMessage
 renderMessage _ = fromMessageData (Proxy @(Proper msg))
+
+type RenameTag :: Symbol -> Symbol -> Message -> Message
+type family RenameTag x y msg where
+  RenameTag x x msg = msg
+  RenameTag x y (Msg tls bls) = Msg
+    (Eval (Map (RenameTLTag x y) tls))
+    (Eval (Map (RenameBLTag x y) bls))
+
+type RenameTLTag x y = Map (RenameTextEntityTag x y)
+data RenameTextEntityTag :: Symbol -> Symbol -> TextEntity -> Exp TextEntity
+type instance Eval (RenameTextEntityTag x y (Var a)) = If (x == a) (Var y) (Var a)
+type instance Eval (RenameTextEntityTag _ _ (Txt a)) = Txt a
+
+type RenameBLTag x y = Map (RenameButtonTag x y)
+data RenameButtonTag :: Symbol -> Symbol -> Button -> Exp Button
+type instance Eval (RenameButtonTag x y (LabelBtn (TxtLn a))) =
+  LabelBtn (TxtLn (Eval (RenameTLTag x y a)))
 
 type IsMessage :: ProperMessage -> [(Symbol, Type)] -> Constraint
 class All (TaggedContextHasEntry ctx) (MessageData a)
