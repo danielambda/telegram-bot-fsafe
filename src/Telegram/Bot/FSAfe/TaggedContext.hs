@@ -21,6 +21,7 @@ module Telegram.Bot.FSAfe.TaggedContext
   , Tagged (..)
   , (.++), type (++)
   , let', andLet
+  , Rename, rename
   ) where
 
 import Data.Tagged (Tagged (..))
@@ -28,8 +29,23 @@ import Data.Tagged (Tagged (..))
 import Data.Kind (Type, Constraint)
 import Data.Proxy (Proxy (..))
 import GHC.TypeLits (Symbol)
+import Unsafe.Coerce (unsafeCoerce)
 
 import Telegram.Bot.FSAfe.FirstClassFamilies (type (++))
+
+type Rename :: Symbol -> Symbol -> [(Symbol, Type)] -> [(Symbol, Type)]
+type family Rename x y as where
+  Rename x y '[] = '[]
+  Rename x y ( '(x, t) : as) = '(y, t) : Rename x y as
+  Rename x y ( '(a, t) : as) = '(a, t) : Rename x y as
+
+rename :: Proxy x -> Proxy y -> TaggedContext ctx -> TaggedContext (Rename x y ctx)
+rename _ _ = unsafeCoerce
+-- for implementation without unsafeCoerce use the following:
+--
+--   Rename x y ( '(a, t) : as) = '(If (a == x) y a, t) : Rename x y as
+-- rename _ _ EmptyTaggedContext = EmptyTaggedContext
+-- rename p q (a :. ctx) = retag a :. rename p q ctx
 
 type TaggedContext :: [(Symbol, Type)] -> Type
 data TaggedContext as where
@@ -64,7 +80,7 @@ EmptyTaggedContext .++ b = b
 
 -- | getTaggedContextEntry returns leftmost entry of the key
 type TaggedContextHasEntry :: [(Symbol, Type)] -> Symbol -> Type -> Constraint
-class TaggedContextHasEntry ctx tag a | ctx -> a where
+class TaggedContextHasEntry ctx tag a | ctx tag -> a where
   getTaggedContextEntry :: Proxy tag -> TaggedContext ctx -> a
 
 instance {-# OVERLAPS #-}
