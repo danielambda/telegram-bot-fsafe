@@ -12,12 +12,12 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
 
 module Telegram.Bot.FSAfe.MessageContext
   ( MessageContext (..)
-  , (.++)
   , MessageContextHasEntry (..)
   , Tagged (..)
   ) where
@@ -26,9 +26,26 @@ import Data.Tagged (Tagged (..))
 
 import Data.Kind (Type, Constraint)
 import Data.Proxy (Proxy)
-import GHC.TypeLits (TypeError, ErrorMessage(..))
+import GHC.TypeLits (Symbol)
 
-type MessageContext :: [(k, Type)] -> Type
+type family NotElem a as where
+  NotElem _ '[] = 'True
+  NotElem a (a:as) = 'False
+  NotElem a (b:bs) = NotElem a bs
+
+type Exp a = a -> Type
+
+type Eval :: Exp a -> a
+type family Eval e
+
+data Map :: (a -> Exp b) -> [a] -> Exp [b]
+type instance Eval (Map _ '[]) = '[]
+type instance Eval (Map f (x:xs)) = Eval (f x) : Eval (Map f xs)
+
+data Fst :: (a, b) -> Exp a
+type instance Eval (Fst '(a, _)) = a
+
+type MessageContext :: [(Symbol, Type)] -> Type
 data MessageContext as where
   EmptyMsgCtx :: MessageContext '[]
   (:.) :: Tagged s a -> MessageContext as -> MessageContext ('(s, a) ': as)
@@ -48,48 +65,17 @@ instance Eq (MessageContext '[]) where
 instance (Eq a, Eq (MessageContext as)) => Eq (MessageContext ('(s, a) ': as)) where
   x1 :. y1 == x2 :. y2 = x1 == x2 && y1 == y2
 
-type (++) :: [k] -> [k] -> [k]
-type family as ++ bs where
-  '[] ++ a = a
-  (a ': as) ++ b = a ': (as ++ b)
-
-(.++) :: MessageContext l1 -> MessageContext l2 -> MessageContext (l1 ++ l2)
-EmptyMsgCtx .++ a = a
-(a :. as) .++ b = a :. (as .++ b)
-
-type Lookup :: a -> [(a, b)] -> Maybe b
-type family Lookup tag list where
-  Lookup tag '[] = 'Nothing
-  Lookup tag ('(tag, a) : _) = Just a
-  Lookup tag (_ : as) = Lookup tag as
-
-type LookupOrError :: a -> [(a, b)] -> ErrorMessage -> b
-type family LookupOrError tag list errorMessage where
-  LookupOrError tag list e = FromMaybe (TypeError e) (Lookup tag list)
-
-type FromMaybe :: a -> Maybe a -> a
-type family FromMaybe a maybea where
-  FromMaybe a Nothing  = a
-  FromMaybe _ (Just a) = a
-
-type MessageContextHasEntry :: [(k, Type)] -> k -> Constraint
-class MessageContextHasEntry ctx tag where
-  getMessageContextEntry
-    :: Proxy tag
-    -> MessageContext ctx
-    -> LookupOrError tag ctx
-      (    Text "MessageContext " :<>: ShowType ctx
-      :<>: Text " does not contain tag " :<>: ShowType tag
-      )
+type MessageContextHasEntry :: [(Symbol, Type)] -> Symbol -> Type -> Constraint
+class MessageContextHasEntry ctx tag a | ctx tag -> a where
+  getMessageContextEntry :: Proxy tag -> MessageContext ctx -> a
 
 instance {-# OVERLAPS #-}
-         MessageContextHasEntry ('(tag, a) : as) tag where
+         MessageContextHasEntry ('(tag, a) : as) tag a where
   getMessageContextEntry _ ((Tagged a) :. _) = a
 
 -- I have no idea how this combination of equality constraints work here, by the way
 instance {-# OVERLAPPABLE #-}
-         ( MessageContextHasEntry as tag
-         , Lookup tag as ~ Lookup tag ('(nottag, a) : as)
-         , Lookup tag as ~ Just something
-         ) => MessageContextHasEntry ('(nottag, a) : as) tag where
-  getMessageContextEntry proxy (_ :. a) = getMessageContextEntry proxy a
+         MessageContextHasEntry as tag a
+      => MessageContextHasEntry (b : as) tag a where
+  getMessageContextEntry proxy (_ :. as) = getMessageContextEntry proxy as
+

@@ -9,6 +9,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Telegram.Bot.FSAfe.DSL
   ( ProperMessage(..), Message(..), Proper
@@ -28,6 +32,29 @@ import GHC.Base (Symbol)
 import GHC.TypeLits (KnownSymbol, symbolVal, TypeError, ErrorMessage(..))
 
 import Telegram.Bot.FSAfe.Reply (ReplyMessage(..), toReplyMessage, callbackButton)
+import Telegram.Bot.FSAfe.MessageContext
+  ( MessageContext (..), MessageContextHasEntry (getMessageContextEntry), Tagged (..))
+
+myMessage :: ReplyMessage
+myMessage = let
+  ctx
+    =  Tagged @"username" "Daniel"
+    :. Tagged @"unused tag" ()
+    :. Tagged @"botname" "check-check"
+    :. EmptyMsgCtx
+  in fromMessageData (Proxy @(Proper MyMessage)) ctx
+
+type MyMessage
+  =  MyMessageText
+  :\ MyMessageKeyboard
+
+type MyMessageText
+  =  "Hello, dear " :|: Var "username" :|: "!"
+  :\ "I am glad to see you, my name is " :|: Var "botname"
+
+type MyMessageKeyboard
+  =  Btn "Cool"
+  :\ Btn "Ok" :|: Btn "Cancel"
 
 data ProperMessage = PMsg (NonEmpty TextLine) [ButtonLine]
 
@@ -35,8 +62,7 @@ newtype TextLine = TxtLn (NonEmpty TextEntity)
 
 data TextEntity where
   Txt :: Symbol -> TextEntity
-  Var :: k -> TextEntity
-  Var' :: TextEntity
+  Var :: Symbol -> TextEntity
 
 newtype ButtonLine = BtnLn [ButtonEntity]
 
@@ -66,6 +92,11 @@ type JoinMessageLines :: MessageLine -> MessageLine -> MessageLine
 type family JoinMessageLines ml1 ml2 where
   JoinMessageLines (MTL tl1) (MTL tl2) = MTL (tl1 ++ tl2)
   JoinMessageLines (MBL bl1) (MBL bl2) = MBL (bl1 ++ bl2)
+  JoinMessageLines (MTL tl)  (MBL bl) = JoinMessageLinesError tl bl
+  JoinMessageLines (MBL bl)  (MTL tl) = JoinMessageLinesError bl tl
+
+type JoinMessageLinesError a b = TypeError
+  (Text "Cannot have " :<>: ShowType a :<>: Text " in the same line with " :<>: ShowType b)
 
 infixl 0 :\
 type (:\) :: k -> l -> Message
@@ -114,97 +145,107 @@ data ProperBL :: [ButtonEntity] -> Exp ButtonLine
 type instance Eval (ProperBL a) = BtnLn a
 
 infixl 1 ++
-type (++) :: f k -> f k -> f k
+type (++) :: [k] -> [k] -> [k]
 type family as ++ bs where
   '[]      ++ bs = bs
   (a : as) ++ bs = a : (as ++ bs)
-  (a :| '[]) ++ (b :| bs) = a :| b : bs
-  (a :| a1 : as) ++ (b :| bs) = a :| a1 : b : (as ++ bs)
 
-type IsMessage :: ProperMessage -> Constraint
-class IsMessage a where
-  type MessageData a :: Type
-  fromMessageData :: Proxy a -> MessageData a -> ReplyMessage
+type IsMessage :: ProperMessage -> [(Symbol, Type)] -> Constraint
+class All (MessageContextHasEntry ctx) (MessageData a)
+   => IsMessage a ctx where
+  type MessageData a :: [(Symbol, Type)]
+  fromMessageData :: Proxy a -> MessageContext ctx -> ReplyMessage
 
 -- induction base
-instance (IsTextLine tl)
-      => IsMessage (PMsg (tl :| '[]) '[]) where
-  type MessageData (PMsg (tl :| '[]) '[]) = (TextLineData tl)
-  fromMessageData _ tlData = let
+instance IsTextLine tl ctx
+      => IsMessage (PMsg (tl :| '[]) '[]) ctx where
+  type MessageData (PMsg (tl :| '[]) '[]) = TextLineData tl
+  fromMessageData _ ctx = let
     messageMarkup = SomeInlineKeyboardMarkup $ InlineKeyboardMarkup []
-    textMessage = toReplyMessage $ fromTextLineData (Proxy @tl) tlData
+    textMessage = toReplyMessage $ fromTextLineData (Proxy @tl) ctx
     in textMessage{replyMessageReplyMarkup = Just messageMarkup}
 
 -- induction step with text line tl
-instance (IsTextLine (TxtLn tl), IsMessage (PMsg (tl1 :| tls) '[]))
-      => IsMessage (PMsg (TxtLn tl :| tl1 : tls) '[]) where
+instance ( IsTextLine (TxtLn tl) ctx, IsMessage (PMsg (tl1 :| tls) '[]) ctx
+         , All (MessageContextHasEntry ctx) (MessageData (PMsg (TxtLn tl :| tl1 : tls) '[]))
+         )
+      => IsMessage (PMsg (TxtLn tl :| tl1 : tls) '[]) ctx where
   type MessageData (PMsg (TxtLn tl :| tl1 : tls) '[]) =
-    (TextLineData (TxtLn tl), MessageData (PMsg (tl1 :| tls) '[]))
-  fromMessageData _ (tlData, msgData) = let
-    replyMessage = fromMessageData (Proxy @(PMsg (tl1 :| tls) '[])) msgData
+    TextLineData (TxtLn tl) ++ MessageData (PMsg (tl1 :| tls) '[])
+    -- Head (TextLineData (TxtLn tl)) : MessageData (PMsg (tl1 :| tls) '[])
+    -- MessageData (PMsg (tl1 :| tls) '[])
+  fromMessageData _ ctx = let
+    replyMessage = fromMessageData (Proxy @(PMsg (tl1 :| tls) '[])) ctx
     newText = T.unlines
-            [ fromTextLineData (Proxy @(TxtLn tl)) tlData
+            [ fromTextLineData (Proxy @(TxtLn tl)) ctx
             , replyMessageText replyMessage ]
     in replyMessage{replyMessageText = newText}
 
 -- induction step with button line bl
-instance (IsButtonLine (BtnLn bl), IsMessage (PMsg tls bls))
-      => IsMessage (PMsg tls (BtnLn bl : bls)) where
+instance ( IsButtonLine (BtnLn bl) ctx, IsMessage (PMsg tls bls) ctx
+         , All (MessageContextHasEntry ctx) (MessageData (PMsg tls (BtnLn bl : bls)))
+         )
+      => IsMessage (PMsg tls (BtnLn bl : bls)) ctx where
   type MessageData (PMsg tls (BtnLn bl : bls)) =
-    (ButtonLineData (BtnLn bl), MessageData (PMsg tls bls))
-  fromMessageData _ (blData, msgData) = let
-    replyMessage = fromMessageData (Proxy @(PMsg tls bls)) msgData
-    buttonLine = fromButtonLineData (Proxy @(BtnLn bl)) blData
+    ButtonLineData (BtnLn bl) ++ MessageData (PMsg tls bls)
+  fromMessageData _ ctx = let
+    replyMessage = fromMessageData (Proxy @(PMsg tls bls)) ctx
+    buttonLine = fromButtonLineData (Proxy @(BtnLn bl)) ctx
     in replyMessage{replyMessageReplyMarkup = Just $ SomeInlineKeyboardMarkup $
       InlineKeyboardMarkup [buttonLine]}
 
-type IsTextLine :: TextLine -> Constraint
-class IsTextLine a where
-  type TextLineData a :: Type
-  fromTextLineData :: Proxy a -> TextLineData a -> T.Text
+type IsTextLine :: TextLine -> [(Symbol, Type)] -> Constraint
+class All (MessageContextHasEntry ctx) (TextLineData a)
+   => IsTextLine a ctx where
+  type TextLineData a :: [(Symbol, Type)]
+  fromTextLineData :: Proxy a -> MessageContext ctx -> T.Text
+
+type All :: (a -> b -> Constraint) -> [(a, b)] -> Constraint
+type family All f x where
+  All _ '[] = ()
+  All f ('(a,b):abs) = (f a b, All f abs)
 
 -- induction base
 instance KnownSymbol s
-      => IsTextLine (TxtLn (Txt s :| '[])) where
-  type TextLineData (TxtLn (Txt s :| '[])) = ()
+      => IsTextLine (TxtLn (Txt s :| '[])) ctx where
+  type TextLineData (TxtLn (Txt s :| '[])) = '[]
   fromTextLineData _ _ = T.pack $ symbolVal $ Proxy @s
 
-instance IsTextLine (TxtLn (Var a :| '[])) where
-  type TextLineData (TxtLn (Var a :| '[])) = T.Text
-  fromTextLineData _ var = var
-
-instance IsTextLine (TxtLn (Var' :| '[])) where
-  type TextLineData (TxtLn (Var' :| '[])) = T.Text
-  fromTextLineData _ = id
+instance MessageContextHasEntry ctx a T.Text
+      => IsTextLine (TxtLn (Var a :| '[])) ctx where
+  type TextLineData (TxtLn (Var a :| '[])) = '[ '(a, T.Text)]
+  fromTextLineData _ = undefined -- getMessageContextEntry (Proxy @a)
 
 -- induction step with Txt
-instance (KnownSymbol s, IsTextLine (TxtLn (l :| ls)))
-      => IsTextLine (TxtLn (Txt s :| l : ls)) where
+instance (KnownSymbol s, IsTextLine (TxtLn (l :| ls)) ctx)
+      => IsTextLine (TxtLn (Txt s :| l : ls)) ctx where
   type TextLineData (TxtLn (Txt s :| l : ls)) = TextLineData (TxtLn (l :| ls))
   fromTextLineData _ tlData
     =  T.pack (symbolVal $ Proxy @s)
     <> fromTextLineData (Proxy @(TxtLn (l:|ls))) tlData
 
 -- induction step with Txt
-instance IsTextLine (TxtLn (l :| ls))
-      => IsTextLine (TxtLn (Var a :| l : ls)) where
-  type TextLineData (TxtLn (Var a :| l : ls)) = (T.Text, TextLineData (TxtLn (l :| ls)))
-  fromTextLineData _ (var, tlData)
-    =  var
-    <> fromTextLineData (Proxy @(TxtLn (l:|ls))) tlData
+instance (IsTextLine (TxtLn (l :| ls)) ctx, MessageContextHasEntry ctx a T.Text)
+      => IsTextLine (TxtLn (Var a :| l : ls)) ctx where
+  type TextLineData (TxtLn (Var a :| l : ls)) = '(a, T.Text) : TextLineData (TxtLn (l :| ls))
+  fromTextLineData _ ctx = let
+    var = getMessageContextEntry (Proxy @a) ctx
+    in var <> fromTextLineData (Proxy @(TxtLn (l:|ls))) ctx
 
-type IsButtonLine :: ButtonLine -> Constraint
-class IsButtonLine a where
-  type ButtonLineData a :: Type
-  fromButtonLineData :: Proxy a -> ButtonLineData a -> [InlineKeyboardButton]
+type IsButtonLine :: ButtonLine -> [(Symbol, Type)] -> Constraint
+class All (MessageContextHasEntry ctx) (ButtonLineData a) => IsButtonLine a ctx where
+  type ButtonLineData a :: [(Symbol, Type)]
+  fromButtonLineData :: Proxy a -> MessageContext ctx -> [InlineKeyboardButton]
 
-instance IsButtonLine (BtnLn '[]) where
-  type ButtonLineData (BtnLn '[]) = ()
+-- induction base
+instance IsButtonLine (BtnLn '[]) ctx where
+  type ButtonLineData (BtnLn '[]) = '[]
   fromButtonLineData _ _ = []
 
-instance (IsButtonLine (BtnLn bl))
-      => IsButtonLine (BtnLn (Btn b : bl)) where
-  type ButtonLineData (BtnLn (Btn b : bl)) = (ButtonLineData (BtnLn bl))
+-- induction step with button
+instance (IsButtonLine (BtnLn bl) ctx)
+      => IsButtonLine (BtnLn (Btn b : bl)) ctx where
+  type ButtonLineData (BtnLn (Btn b : bl)) = ButtonLineData (BtnLn bl)
   fromButtonLineData _ blData = let
     btn = callbackButton (T.pack "") (T.pack "TODO add callback")
     bl = fromButtonLineData (Proxy @(BtnLn bl)) blData
