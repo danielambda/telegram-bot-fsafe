@@ -32,7 +32,7 @@ import GHC.Base (Symbol)
 import GHC.TypeLits (KnownSymbol, symbolVal, TypeError, ErrorMessage(..))
 
 import Telegram.Bot.FSAfe.Reply (ReplyMessage(..), toReplyMessage, callbackButton)
-import Telegram.Bot.FSAfe.MessageContext (MessageContext (..), MessageContextHasEntry (..))
+import Telegram.Bot.FSAfe.TaggedContext (TaggedContext (..), TaggedContextHasEntry (..))
 import Telegram.Bot.FSAfe.FirstClassFamilies (Exp, Eval, Map, type (++))
 
 data ProperMessage = PMsg (NonEmpty TextLine) [ButtonLine]
@@ -113,10 +113,10 @@ data ProperBL :: [Button] -> Exp ButtonLine
 type instance Eval (ProperBL a) = BtnLn a
 
 type IsMessage :: ProperMessage -> [(Symbol, Type)] -> Constraint
-class All (MessageContextHasEntry ctx) (MessageData a)
+class All (TaggedContextHasEntry ctx) (MessageData a)
    => IsMessage a ctx where
   type MessageData a :: [(Symbol, Type)]
-  fromMessageData :: Proxy a -> MessageContext ctx -> ReplyMessage
+  fromMessageData :: Proxy a -> TaggedContext ctx -> ReplyMessage
 
 instance IsTextLine tl ctx
       => IsMessage (PMsg (tl :| '[]) '[]) ctx where
@@ -126,8 +126,9 @@ instance IsTextLine tl ctx
     textMessage = toReplyMessage $ fromTextLineData (Proxy @tl) ctx
     in textMessage{replyMessageReplyMarkup = Just messageMarkup}
 
-instance ( IsTextLine (TxtLn tl) ctx, IsMessage (PMsg (tl1 :| tls) '[]) ctx
-         , All (MessageContextHasEntry ctx) (MessageData (PMsg (TxtLn tl :| tl1 : tls) '[]))
+instance ( IsTextLine (TxtLn tl) ctx
+         , IsMessage (PMsg (tl1 :| tls) '[]) ctx
+         , All (TaggedContextHasEntry ctx) (MessageData (PMsg (TxtLn tl :| tl1 : tls) '[]))
          )
       => IsMessage (PMsg (TxtLn tl :| tl1 : tls) '[]) ctx where
   type MessageData (PMsg (TxtLn tl :| tl1 : tls) '[]) =
@@ -139,8 +140,9 @@ instance ( IsTextLine (TxtLn tl) ctx, IsMessage (PMsg (tl1 :| tls) '[]) ctx
             , replyMessageText replyMessage ]
     in replyMessage{replyMessageText = newText}
 
-instance ( IsButtonLine (BtnLn bl) ctx, IsMessage (PMsg tls bls) ctx
-         , All (MessageContextHasEntry ctx) (MessageData (PMsg tls (BtnLn bl : bls)))
+instance ( IsButtonLine (BtnLn bl) ctx
+         , IsMessage (PMsg tls bls) ctx
+         , All (TaggedContextHasEntry ctx) (MessageData (PMsg tls (BtnLn bl : bls)))
          )
       => IsMessage (PMsg tls (BtnLn bl : bls)) ctx where
   type MessageData (PMsg tls (BtnLn bl : bls)) =
@@ -152,10 +154,10 @@ instance ( IsButtonLine (BtnLn bl) ctx, IsMessage (PMsg tls bls) ctx
       InlineKeyboardMarkup [buttonLine]}
 
 type IsTextLine :: TextLine -> [(Symbol, Type)] -> Constraint
-class All (MessageContextHasEntry ctx) (TextLineData a)
+class All (TaggedContextHasEntry ctx) (TextLineData a)
    => IsTextLine a ctx where
   type TextLineData a :: [(Symbol, Type)]
-  fromTextLineData :: Proxy a -> MessageContext ctx -> T.Text
+  fromTextLineData :: Proxy a -> TaggedContext ctx -> T.Text
 
 type All :: (a -> b -> Constraint) -> [(a, b)] -> Constraint
 type family All f x where
@@ -167,10 +169,10 @@ instance KnownSymbol s
   type TextLineData (TxtLn (Txt s :| '[])) = '[]
   fromTextLineData _ _ = T.pack $ symbolVal $ Proxy @s
 
-instance MessageContextHasEntry ctx a T.Text
+instance TaggedContextHasEntry ctx a T.Text
       => IsTextLine (TxtLn (Var a :| '[])) ctx where
   type TextLineData (TxtLn (Var a :| '[])) = '[ '(a, T.Text)]
-  fromTextLineData _ = getMessageContextEntry (Proxy @a)
+  fromTextLineData _ = getTaggedContextEntry (Proxy @a)
 
 instance (KnownSymbol s, IsTextLine (TxtLn (l :| ls)) ctx)
       => IsTextLine (TxtLn (Txt s :| l : ls)) ctx where
@@ -179,17 +181,17 @@ instance (KnownSymbol s, IsTextLine (TxtLn (l :| ls)) ctx)
     =  T.pack (symbolVal $ Proxy @s)
     <> fromTextLineData (Proxy @(TxtLn (l:|ls))) tlData
 
-instance (IsTextLine (TxtLn (l :| ls)) ctx, MessageContextHasEntry ctx a T.Text)
+instance (IsTextLine (TxtLn (l :| ls)) ctx, TaggedContextHasEntry ctx a T.Text)
       => IsTextLine (TxtLn (Var a :| l : ls)) ctx where
   type TextLineData (TxtLn (Var a :| l : ls)) = '(a, T.Text) : TextLineData (TxtLn (l :| ls))
   fromTextLineData _ ctx = let
-    var = getMessageContextEntry (Proxy @a) ctx
+    var = getTaggedContextEntry (Proxy @a) ctx
     in var <> fromTextLineData (Proxy @(TxtLn (l:|ls))) ctx
 
 type IsButtonLine :: ButtonLine -> [(Symbol, Type)] -> Constraint
-class All (MessageContextHasEntry ctx) (ButtonLineData a) => IsButtonLine a ctx where
+class All (TaggedContextHasEntry ctx) (ButtonLineData a) => IsButtonLine a ctx where
   type ButtonLineData a :: [(Symbol, Type)]
-  fromButtonLineData :: Proxy a -> MessageContext ctx -> [InlineKeyboardButton]
+  fromButtonLineData :: Proxy a -> TaggedContext ctx -> [InlineKeyboardButton]
 
 instance IsButtonLine (BtnLn '[]) ctx where
   type ButtonLineData (BtnLn '[]) = '[]
