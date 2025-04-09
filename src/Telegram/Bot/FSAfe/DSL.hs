@@ -1,23 +1,23 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE StandaloneKindSignatures #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE UndecidableSuperClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 
 module Telegram.Bot.FSAfe.DSL
   ( ProperMessage(..), Message(..), Proper
   , TextLine(..), TextEntity(..)
-  , ButtonLine(..), ButtonEntity(..)
+  , ButtonLine(..), Button(..)
   , MessageLine(..)
   , type (:|:), type (:\)
   ) where
@@ -32,29 +32,8 @@ import GHC.Base (Symbol)
 import GHC.TypeLits (KnownSymbol, symbolVal, TypeError, ErrorMessage(..))
 
 import Telegram.Bot.FSAfe.Reply (ReplyMessage(..), toReplyMessage, callbackButton)
-import Telegram.Bot.FSAfe.MessageContext
-  ( MessageContext (..), MessageContextHasEntry (getMessageContextEntry), Tagged (..))
-
-myMessage :: ReplyMessage
-myMessage = let
-  ctx
-    =  Tagged @"username" "Daniel"
-    :. Tagged @"unused tag" ()
-    :. Tagged @"botname" "check-check"
-    :. EmptyMsgCtx
-  in fromMessageData (Proxy @(Proper MyMessage)) ctx
-
-type MyMessage
-  =  MyMessageText
-  :\ MyMessageKeyboard
-
-type MyMessageText
-  =  "Hello, dear " :|: Var "username" :|: "!"
-  :\ "I am glad to see you, my name is " :|: Var "botname"
-
-type MyMessageKeyboard
-  =  Btn "Cool"
-  :\ Btn "Ok" :|: Btn "Cancel"
+import Telegram.Bot.FSAfe.MessageContext (MessageContext (..), MessageContextHasEntry (..))
+import Telegram.Bot.FSAfe.FirstClassFamilies (Exp, Eval, Map, type (++))
 
 data ProperMessage = PMsg (NonEmpty TextLine) [ButtonLine]
 
@@ -64,16 +43,16 @@ data TextEntity where
   Txt :: Symbol -> TextEntity
   Var :: Symbol -> TextEntity
 
-newtype ButtonLine = BtnLn [ButtonEntity]
+newtype ButtonLine = BtnLn [Button]
 
-data ButtonEntity where
-  Btn :: k -> ButtonEntity
+data Button where
+  Btn :: k -> Button
 
-data Message = Msg [[TextEntity]] [[ButtonEntity]]
+data Message = Msg [[TextEntity]] [[Button]]
 
 data MessageLine where
   MTL :: [TextEntity] -> MessageLine
-  MBL :: [ButtonEntity] -> MessageLine
+  MBL :: [Button] -> MessageLine
 
 infixr 9 :|:
 type (:|:) :: k -> l -> MessageLine
@@ -121,34 +100,17 @@ type family AsMessage a where
 
 type Proper :: Message -> ProperMessage
 type family Proper msg where
-  Proper (Msg '[]      _)   = TypeError (Text "Cannot have a message without text")
   Proper (Msg (tl:tls) bls) = PMsg
     (Eval (ProperTL tl) :| Eval (Map ProperTL tls))
     (Eval (Map ProperBL bls))
-
--- TODO move this out to some module for first-class-families styled things
-type Exp a = a -> Type
-
-type Eval :: Exp a -> a
-type family Eval e
-
-data Map :: (a -> Exp b) -> [a] -> Exp [b]
-type instance Eval (Map _ '[]) = '[]
-type instance Eval (Map f (x:xs)) = Eval (f x) : Eval (Map f xs)
---
+  Proper (Msg '[] _) = TypeError (Text "Cannot have a message without text")
 
 data ProperTL :: [TextEntity] -> Exp TextLine
-type instance Eval (ProperTL '[]) = TypeError (Text "TODO")
+type instance Eval (ProperTL '[]) = TypeError (Text "Cannot have empty text line")
 type instance Eval (ProperTL (tl:tls)) = TxtLn (tl:|tls)
 
-data ProperBL :: [ButtonEntity] -> Exp ButtonLine
+data ProperBL :: [Button] -> Exp ButtonLine
 type instance Eval (ProperBL a) = BtnLn a
-
-infixl 1 ++
-type (++) :: [k] -> [k] -> [k]
-type family as ++ bs where
-  '[]      ++ bs = bs
-  (a : as) ++ bs = a : (as ++ bs)
 
 type IsMessage :: ProperMessage -> [(Symbol, Type)] -> Constraint
 class All (MessageContextHasEntry ctx) (MessageData a)
@@ -156,7 +118,6 @@ class All (MessageContextHasEntry ctx) (MessageData a)
   type MessageData a :: [(Symbol, Type)]
   fromMessageData :: Proxy a -> MessageContext ctx -> ReplyMessage
 
--- induction base
 instance IsTextLine tl ctx
       => IsMessage (PMsg (tl :| '[]) '[]) ctx where
   type MessageData (PMsg (tl :| '[]) '[]) = TextLineData tl
@@ -165,15 +126,12 @@ instance IsTextLine tl ctx
     textMessage = toReplyMessage $ fromTextLineData (Proxy @tl) ctx
     in textMessage{replyMessageReplyMarkup = Just messageMarkup}
 
--- induction step with text line tl
 instance ( IsTextLine (TxtLn tl) ctx, IsMessage (PMsg (tl1 :| tls) '[]) ctx
          , All (MessageContextHasEntry ctx) (MessageData (PMsg (TxtLn tl :| tl1 : tls) '[]))
          )
       => IsMessage (PMsg (TxtLn tl :| tl1 : tls) '[]) ctx where
   type MessageData (PMsg (TxtLn tl :| tl1 : tls) '[]) =
     TextLineData (TxtLn tl) ++ MessageData (PMsg (tl1 :| tls) '[])
-    -- Head (TextLineData (TxtLn tl)) : MessageData (PMsg (tl1 :| tls) '[])
-    -- MessageData (PMsg (tl1 :| tls) '[])
   fromMessageData _ ctx = let
     replyMessage = fromMessageData (Proxy @(PMsg (tl1 :| tls) '[])) ctx
     newText = T.unlines
@@ -181,7 +139,6 @@ instance ( IsTextLine (TxtLn tl) ctx, IsMessage (PMsg (tl1 :| tls) '[]) ctx
             , replyMessageText replyMessage ]
     in replyMessage{replyMessageText = newText}
 
--- induction step with button line bl
 instance ( IsButtonLine (BtnLn bl) ctx, IsMessage (PMsg tls bls) ctx
          , All (MessageContextHasEntry ctx) (MessageData (PMsg tls (BtnLn bl : bls)))
          )
@@ -205,7 +162,6 @@ type family All f x where
   All _ '[] = ()
   All f ('(a,b):abs) = (f a b, All f abs)
 
--- induction base
 instance KnownSymbol s
       => IsTextLine (TxtLn (Txt s :| '[])) ctx where
   type TextLineData (TxtLn (Txt s :| '[])) = '[]
@@ -214,9 +170,8 @@ instance KnownSymbol s
 instance MessageContextHasEntry ctx a T.Text
       => IsTextLine (TxtLn (Var a :| '[])) ctx where
   type TextLineData (TxtLn (Var a :| '[])) = '[ '(a, T.Text)]
-  fromTextLineData _ = undefined -- getMessageContextEntry (Proxy @a)
+  fromTextLineData _ = getMessageContextEntry (Proxy @a)
 
--- induction step with Txt
 instance (KnownSymbol s, IsTextLine (TxtLn (l :| ls)) ctx)
       => IsTextLine (TxtLn (Txt s :| l : ls)) ctx where
   type TextLineData (TxtLn (Txt s :| l : ls)) = TextLineData (TxtLn (l :| ls))
@@ -224,7 +179,6 @@ instance (KnownSymbol s, IsTextLine (TxtLn (l :| ls)) ctx)
     =  T.pack (symbolVal $ Proxy @s)
     <> fromTextLineData (Proxy @(TxtLn (l:|ls))) tlData
 
--- induction step with Txt
 instance (IsTextLine (TxtLn (l :| ls)) ctx, MessageContextHasEntry ctx a T.Text)
       => IsTextLine (TxtLn (Var a :| l : ls)) ctx where
   type TextLineData (TxtLn (Var a :| l : ls)) = '(a, T.Text) : TextLineData (TxtLn (l :| ls))
@@ -237,13 +191,11 @@ class All (MessageContextHasEntry ctx) (ButtonLineData a) => IsButtonLine a ctx 
   type ButtonLineData a :: [(Symbol, Type)]
   fromButtonLineData :: Proxy a -> MessageContext ctx -> [InlineKeyboardButton]
 
--- induction base
 instance IsButtonLine (BtnLn '[]) ctx where
   type ButtonLineData (BtnLn '[]) = '[]
   fromButtonLineData _ _ = []
 
--- induction step with button
-instance (IsButtonLine (BtnLn bl) ctx)
+instance IsButtonLine (BtnLn bl) ctx
       => IsButtonLine (BtnLn (Btn b : bl)) ctx where
   type ButtonLineData (BtnLn (Btn b : bl)) = ButtonLineData (BtnLn bl)
   fromButtonLineData _ blData = let

@@ -22,6 +22,7 @@ library
       Telegram.Bot.FSAfe.Start.Internal
   other-modules:
       Telegram.Bot.FSAfe.DSL
+      Telegram.Bot.FSAfe.FirstClassFamilies
       Telegram.Bot.FSAfe.MessageContext
       Paths_telegram_bot_fsafe
   hs-source-dirs:
