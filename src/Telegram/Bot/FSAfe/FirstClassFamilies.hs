@@ -9,9 +9,13 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Telegram.Bot.FSAfe.FirstClassFamilies (Exp, Eval, Map, type (++), type (==)) where
+module Telegram.Bot.FSAfe.FirstClassFamilies
+  ( Exp, Eval, Map
+  , type (++), type (==)
+  , All
+  ) where
 
-import Data.Kind (Type)
+import Data.Kind (Type, Constraint)
 
 type Exp a = a -> Type
 
@@ -33,3 +37,9 @@ type (==) :: k -> k -> Bool
 type family x == y where
   x == x = True
   _ == _ = False
+
+type All :: (a -> b -> Constraint) -> [(a, b)] -> Constraint
+type family All f x where
+  All _ '[] = ()
+  All f ('(a,b):abs) = (f a b, All f abs)
+
