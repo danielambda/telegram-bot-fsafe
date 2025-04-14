@@ -24,7 +24,7 @@ module Telegram.Bot.FSAfe.DSL
   ) where
 
 import qualified Data.Text as T (Text, pack, unlines)
-import Telegram.Bot.API (InlineKeyboardButton, SomeReplyMarkup (..), InlineKeyboardMarkup (..), labeledInlineKeyboardButton)
+import Telegram.Bot.API (InlineKeyboardButton, SomeReplyMarkup (..), InlineKeyboardMarkup (..))
 
 import Data.Kind (Type, Constraint)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -48,7 +48,11 @@ data TextEntity where
 newtype ButtonLine = BtnLn [Button]
 
 data Button where
-  LabelBtn :: TextLine -> Button
+  CallbackBtn :: [TextEntity] -> [TextEntity] -> Button
+  -- UrlBtn :: TextLine -> TextLine -> Button
+  -- WebAppBtn, LoginUrlBtn, SwitchInlineQueryBtn,
+  -- SwitchInlineQueryCurrentChatBtn, SwitchInlineQueryChosenChatBtn
+  -- CallbackGameBtn, PayBtn
 
 data Message = Msg [[TextEntity]] [[Button]]
 
@@ -66,15 +70,15 @@ type family AsMessageLine a where
   AsMessageLine (MBL a) = MBL a
   AsMessageLine (a :: Symbol) = MTL '[Txt a]
   AsMessageLine (Var a) = MTL '[Var a]
-  AsMessageLine (LabelBtn a) = MBL '[LabelBtn a]
+  AsMessageLine (CallbackBtn a b) = MBL '[CallbackBtn a b]
   AsMessageLine a = TypeError (Text "Cannot convert " :<>: ShowType a :<>: Text " to MessageLine")
 
 type JoinMessageLines :: MessageLine -> MessageLine -> MessageLine
 type family JoinMessageLines ml1 ml2 where
-  JoinMessageLines (MTL tl1) (MTL tl2) = MTL (tl1 ++ tl2)
-  JoinMessageLines (MBL bl1) (MBL bl2) = MBL (bl1 ++ bl2)
-  JoinMessageLines (MTL tl)  (MBL bl) = JoinMessageLinesError tl bl
-  JoinMessageLines (MBL bl)  (MTL tl) = JoinMessageLinesError bl tl
+  JoinMessageLines (MTL a) (MTL b) = MTL (a ++ b)
+  JoinMessageLines (MBL a) (MBL b) = MBL (a ++ b)
+  JoinMessageLines (MTL a) (MBL b)  = JoinMessageLinesError a b
+  JoinMessageLines (MBL a) (MTL b)  = JoinMessageLinesError a b
 
 type JoinMessageLinesError a b = TypeError
   (Text "Cannot have " :<>: ShowType a :<>: Text " in the same line with " :<>: ShowType b)
@@ -95,17 +99,20 @@ type family AsMessage a where
   AsMessage (a :: Symbol) = Msg '[ '[Txt a]] '[]
   AsMessage (Txt a)       = Msg '[ '[Txt a]] '[]
   AsMessage (Var a)       = Msg '[ '[Var a]] '[]
-  AsMessage (LabelBtn a)  = Msg '[]          '[ '[LabelBtn a]]
+  AsMessage (CallbackBtn a b)  = Msg '[]     '[ '[CallbackBtn a b]]
   AsMessage (MTL a)       = Msg '[a]         '[]
   AsMessage (MBL a)       = Msg '[]          '[a]
   AsMessage a = TypeError (Text "Cannot convert " :<>: ShowType a :<>: Text " to Message")
 
-type Proper :: Message -> ProperMessage
-type family Proper msg where
-  Proper (Msg (tl:tls) bls) = PMsg
+type Proper :: k -> ProperMessage
+type Proper x = Proper' (AsMessage x)
+
+type Proper' :: Message -> ProperMessage
+type family Proper' msg where
+  Proper' (Msg (tl:tls) bls) = PMsg
     (Eval (ProperTL tl) :| Eval (Map ProperTL tls))
     (Eval (Map ProperBL bls))
-  Proper (Msg '[] _) = TypeError (Text "Cannot have a message without text")
+  Proper' (Msg '[] _) = TypeError (Text "Cannot have a message without text")
 
 data ProperTL :: [TextEntity] -> Exp TextLine
 type instance Eval (ProperTL '[]) = TypeError (Text "Cannot have empty text line")
@@ -133,8 +140,8 @@ type instance Eval (RenameTextEntityTag _ _ (Txt a)) = Txt a
 
 type RenameBLTag x y = Map (RenameButtonTag x y)
 data RenameButtonTag :: Symbol -> Symbol -> Button -> Exp Button
-type instance Eval (RenameButtonTag x y (LabelBtn (TxtLn a))) =
-  LabelBtn (TxtLn (Eval (RenameTLTag x y a)))
+type instance Eval (RenameButtonTag x y (CallbackBtn a b)) =
+  CallbackBtn (Eval (RenameTLTag x y a)) (Eval (RenameTLTag x y b))
 
 type IsMessage :: ProperMessage -> [(Symbol, Type)] -> Constraint
 class All (TaggedContextHasEntry ctx) (MessageData a)
@@ -151,8 +158,8 @@ instance IsTextLine tl ctx
     in textMessage{replyMessageReplyMarkup = Just messageMarkup}
 
 instance ( IsTextLine (TxtLn tl) ctx
-         , IsMessage (PMsg (tl1 :| tls) '[]) ctx
          , All (TaggedContextHasEntry ctx) (MessageData (PMsg (TxtLn tl :| tl1 : tls) '[]))
+         , IsMessage (PMsg (tl1 :| tls) '[]) ctx
          )
       => IsMessage (PMsg (TxtLn tl :| tl1 : tls) '[]) ctx where
   type MessageData (PMsg (TxtLn tl :| tl1 : tls) '[]) =
@@ -221,15 +228,15 @@ instance IsButtonLine (BtnLn '[]) ctx where
   type ButtonLineData (BtnLn '[]) = '[]
   fromButtonLineData _ _ = []
 
-instance ( IsButtonLine (BtnLn bl) ctx
-         , IsTextLine tl ctx
-         , All (TaggedContextHasEntry ctx) (ButtonLineData (BtnLn (LabelBtn tl : bl)))
-         )
-      => IsButtonLine (BtnLn (LabelBtn tl : bl)) ctx where
-  type ButtonLineData (BtnLn (LabelBtn tl : bl)) =
-    TextLineData tl ++ ButtonLineData (BtnLn bl)
-  fromButtonLineData _ ctx = let
-    label = fromTextLineData (Proxy @tl) ctx
-    btn = labeledInlineKeyboardButton label
-    bl = fromButtonLineData (Proxy @(BtnLn bl)) ctx
-    in btn : bl
+-- instance ( IsButtonLine (BtnLn bl) ctx
+--          , IsTextLine (TxtLn tl) ctx
+--          , All (TaggedContextHasEntry ctx) (ButtonLineData (BtnLn (CallbackBtn с tl : bl)))
+--          )
+--       => IsButtonLine (BtnLn (CallbackBtn с tl : bl)) ctx where
+--   type ButtonLineData (BtnLn (CallbackBtn с tl : bl)) =
+--     TextLineData tl ++ ButtonLineData (BtnLn bl)
+--   fromButtonLineData _ ctx = let
+--     label = fromTextLineData (Proxy @tl) ctx
+--     btn = labeledInlineKeyboardButton label
+--     bl = fromButtonLineData (Proxy @(BtnLn bl)) ctx
+--     in btn : bl

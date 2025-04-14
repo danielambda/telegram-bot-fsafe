@@ -12,17 +12,16 @@
 module Telegram.Bot.FSAfe.FirstClassFamilies (Exp, Eval, Map, type (++), type (==)) where
 
 import Data.Kind (Type)
-import Data.List.NonEmpty (NonEmpty(..))
 
 type Exp a = a -> Type
 
 type Eval :: Exp a -> a
 type family Eval e
 
-data Map :: (a -> Exp b) -> f a -> Exp (f b)
+data Map :: (a -> Exp b) -> [a] -> Exp [b]
 type instance Eval (Map _ '[]) = '[]
 type instance Eval (Map f (x :  xs)) = Eval (f x) :  Eval (Map f xs)
-type instance Eval (Map f (x :| xs)) = Eval (f x) :| Eval (Map f xs)
+-- type instance Eval (Map f (x :| xs)) = Eval (f x) :| Eval (Map f xs)
 
 infixr 5 ++
 type (++) :: [k] -> [k] -> [k]
