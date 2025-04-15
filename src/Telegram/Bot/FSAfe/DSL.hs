@@ -15,12 +15,14 @@
 
 module Telegram.Bot.FSAfe.DSL
   ( ProperMessage(..), Message(..), Proper
+  , Proper'
+  , IsMessage(..)
   , TextEntity(..)
-  , Button(..)
   , MessageLine(..)
-  , CallbackBtn
+  , ButtonEntity(..), CallbackBtn
   , type (:|:), type (:\)
   , RenameTag
+  , AsMessage
   , renderMessage
   ) where
 
@@ -38,24 +40,25 @@ import Telegram.Bot.FSAfe.Reply (ReplyMessage(..), toReplyMessage, callbackButto
 import Telegram.Bot.FSAfe.TaggedContext (TaggedContext, TaggedContextHasEntry (..))
 import Telegram.Bot.FSAfe.FirstClassFamilies (All, Exp, Eval, Map, type (++), type (==))
 
-data ProperMessage = PMsg (NonEmpty [TextEntity]) [[Button]]
+data ProperMessage = PMsg (NonEmpty [TextEntity]) [[ButtonEntity]]
 
 data TextEntity where
   Txt :: Symbol -> TextEntity
   Var :: Symbol -> TextEntity
 
-data Button where
-  CallbackBtn' :: [TextEntity] -> [TextEntity] -> Button
+data ButtonEntity where
+  CallbackBtn' :: [TextEntity] -> [TextEntity] -> ButtonEntity
+  CallbackButtons :: Type -> Symbol -> ButtonEntity
   -- UrlBtn :: [TextEntity] -> [TextEntity] -> Button
   -- WebAppBtn, LoginUrlBtn, SwitchInlineQueryBtn,
   -- SwitchInlineQueryCurrentChatBtn, SwitchInlineQueryChosenChatBtn
   -- CallbackGameBtn, PayBtn
 
-data Message = Msg [[TextEntity]] [[Button]]
+data Message = Msg [[TextEntity]] [[ButtonEntity]]
 
 data MessageLine where
   MTL :: [TextEntity] -> MessageLine
-  MBL :: [Button] -> MessageLine
+  MBL :: [ButtonEntity] -> MessageLine
 
 infixr 9 :|:
 type (:|:) :: k -> l -> MessageLine
@@ -67,7 +70,7 @@ type family AsMessageLine a where
   AsMessageLine (MBL a) = MBL a
   AsMessageLine (a :: Symbol) = MTL '[Txt a]
   AsMessageLine (a :: TextEntity) = MTL '[a]
-  AsMessageLine (a :: Button) = MBL '[a]
+  AsMessageLine (a :: ButtonEntity) = MBL '[a]
   AsMessageLine a = TypeError (Text "Cannot convert " :<>: ShowType a :<>: Text " to MessageLine")
 
 type JoinMessageLines :: MessageLine -> MessageLine -> MessageLine
@@ -86,12 +89,12 @@ type a :\ b = JoinMessages (AsMessage a) (AsMessage b)
 
 type AsMessage :: k -> Message
 type family AsMessage a where
-  AsMessage (a :: Message)    = a
-  AsMessage (a :: Symbol)     = Msg '[ '[Txt a]] '[]
-  AsMessage (a :: TextEntity) = Msg '[ '[a]]     '[]
-  AsMessage (a :: Button)     = Msg '[]          '[ '[a]]
-  AsMessage (MTL a)           = Msg '[a]         '[]
-  AsMessage (MBL a)           = Msg '[]          '[a]
+  AsMessage (a :: Message)      = a
+  AsMessage (a :: Symbol)       = Msg '[ '[Txt a]] '[]
+  AsMessage (a :: TextEntity)   = Msg '[ '[a]]     '[]
+  AsMessage (a :: ButtonEntity) = Msg '[]          '[ '[a]]
+  AsMessage (MTL a)             = Msg '[a]         '[]
+  AsMessage (MBL a)             = Msg '[]          '[a]
   AsMessage a = TypeError (Text "Cannot convert " :<>: ShowType a :<>: Text " to Message")
 
 type JoinMessages :: Message -> Message -> Message
@@ -100,7 +103,7 @@ type family JoinMessages m1 m2 where
   JoinMessages (Msg tls bls1) (Msg '[] bls2) = Msg tls (bls1 ++ bls2)
   JoinMessages (Msg _ (_:_))  (Msg (_:_) _)  = TypeError (Text "Cannot have text below buttons")
 
-type CallbackBtn :: k -> l -> Button
+type CallbackBtn :: k -> l -> ButtonEntity
 type family CallbackBtn a b where
   CallbackBtn a b = CallbackBtn' (AsTextLine a) (AsTextLine b)
 
@@ -126,12 +129,11 @@ data ProperTL :: [TextEntity] -> Exp [TextEntity]
 type instance Eval (ProperTL '[]) = TypeError (Text "Cannot have empty text line")
 type instance Eval (ProperTL (tl:tls)) = tl:tls
 
-data ProperBL :: [Button] -> Exp [Button]
+data ProperBL :: [ButtonEntity] -> Exp [ButtonEntity]
 type instance Eval (ProperBL a) = a
 
-renderMessage
-  :: forall msg ctx. (IsMessage (Proper msg) ctx)
-  => Proxy msg -> TaggedContext ctx -> ReplyMessage
+renderMessage :: forall k {msg :: k} ctx. IsMessage (Proper msg) ctx
+              => Proxy msg -> TaggedContext ctx -> ReplyMessage
 renderMessage _ = fromMessageData (Proxy @(Proper msg))
 
 type RenameTag :: Symbol -> Symbol -> Message -> Message
@@ -147,7 +149,7 @@ type instance Eval (RenameTextEntityTag x y (Var a)) = If (x == a) (Var y) (Var 
 type instance Eval (RenameTextEntityTag _ _ (Txt a)) = Txt a
 
 type RenameBLTag x y = Map (RenameButtonTag x y)
-data RenameButtonTag :: Symbol -> Symbol -> Button -> Exp Button
+data RenameButtonTag :: Symbol -> Symbol -> ButtonEntity -> Exp ButtonEntity
 type instance Eval (RenameButtonTag x y (CallbackBtn' a b)) =
   CallbackBtn' (Eval (RenameTLTag x y a)) (Eval (RenameTLTag x y b))
 
@@ -189,8 +191,12 @@ instance ( IsButtonLine bl ctx
   fromMessageData _ = do
     replyMessage <- fromMessageData (Proxy @(PMsg tls bls))
     buttonLine <- fromButtonLineData (Proxy @bl)
+    let initialButtons = concatMap f $ replyMessageReplyMarkup replyMessage
     return $ replyMessage{replyMessageReplyMarkup = Just $ SomeInlineKeyboardMarkup $
-      InlineKeyboardMarkup [buttonLine]}
+      InlineKeyboardMarkup (buttonLine : initialButtons)}
+    where
+      f (SomeInlineKeyboardMarkup (InlineKeyboardMarkup x)) = x
+      f _ = []
 
 type IsTextLine :: [TextEntity] -> [(Symbol, Type)] -> Constraint
 class IsTextLine a ctx where
@@ -222,7 +228,7 @@ instance (IsTextLine (l : ls) ctx, TaggedContextHasEntry ctx a T.Text)
     textLine <- fromTextLineData (Proxy @(l:ls))
     return $ var <> textLine
 
-type IsButtonLine :: [Button] -> [(Symbol, Type)] -> Constraint
+type IsButtonLine :: [ButtonEntity] -> [(Symbol, Type)] -> Constraint
 class IsButtonLine a ctx where
   type ButtonLineData a :: [(Symbol, Type)]
   fromButtonLineData :: Proxy a -> TaggedContext ctx -> [InlineKeyboardButton]
@@ -240,12 +246,12 @@ instance ( IsButton b ctx
   fromButtonLineData _ = do
     btn <- fromButtonData (Proxy @b)
     bl <- fromButtonLineData (Proxy @bl)
-    return $ btn : bl
+    return $ btn ++ bl
 
-type IsButton :: Button -> [(Symbol, Type)] -> Constraint
+type IsButton :: ButtonEntity -> [(Symbol, Type)] -> Constraint
 class IsButton a ctx where
   type ButtonData a :: [(Symbol, Type)]
-  fromButtonData :: Proxy a -> TaggedContext ctx -> InlineKeyboardButton
+  fromButtonData :: Proxy a -> TaggedContext ctx -> [InlineKeyboardButton]
 
 instance (IsTextLine l ctx, IsTextLine c ctx)
       => IsButton (CallbackBtn' l c) ctx where
@@ -253,4 +259,12 @@ instance (IsTextLine l ctx, IsTextLine c ctx)
   fromButtonData _ = do
     label <- fromTextLineData (Proxy @l)
     callback <- fromTextLineData (Proxy @c)
-    return $ callbackButton label callback
+    return [callbackButton label callback]
+
+instance (TaggedContextHasEntry ctx s (a -> InlineKeyboardButton, [a]))
+      => IsButton (CallbackButtons a s) ctx where
+  type ButtonData (CallbackButtons a s) = '[ '(s, (a -> InlineKeyboardButton, [a]))]
+  fromButtonData _ = do
+    (f, xs) <- getTaggedContextEntry (Proxy @s)
+    return $ f <$> xs
+

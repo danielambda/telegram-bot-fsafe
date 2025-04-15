@@ -5,10 +5,10 @@
 
 module Telegram.Bot.FSAfe.Start
   ( getEnvToken
-  ,      startBot,      startBot_
   , hoistStartBot, hoistStartBot_
-  ,      startKeyedBot,      startKeyedBot_
+  ,      startBot,      startBot_
   , hoistStartKeyedBot, hoistStartKeyedBot_
+  ,      startKeyedBot,      startKeyedBot_
   , startBotGeneric
   ) where
 

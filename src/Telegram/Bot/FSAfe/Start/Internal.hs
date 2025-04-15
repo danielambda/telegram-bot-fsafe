@@ -8,6 +8,9 @@
 -}
 
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Telegram.Bot.FSAfe.Start.Internal
   ( tryAdvanceState
@@ -19,7 +22,8 @@ import qualified Telegram.Bot.API as Tg
 import Servant.Client (ClientError, ClientM, runClientM)
 
 import Telegram.Bot.FSAfe.FSA
-  (SomeTransitionFrom(..), SomeStateData(..), parseTransition, IsTransition(..), IsState (..), FSAfeM)
+  (SomeTransitionFrom(..), SomeStateData(..), parseTransition, IsTransition(..), IsState (..), FSAfeM, Aboba (..)
+  )
 import Telegram.Bot.FSAfe.BotM (MonadBot(..))
 import Control.Monad.Error.Class (catchError)
 import Control.Monad.IO.Class (liftIO)
@@ -33,14 +37,22 @@ import Control.Concurrent.STM
 import Data.Either (partitionEithers)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Control.Concurrent.Async (Async(asyncThreadId), async, link)
+import Telegram.Bot.FSAfe.DSL (renderMessage)
+import Data.Proxy (Proxy(..))
+import Telegram.Bot.FSAfe.Reply (reply)
 
 tryAdvanceState :: MonadBot FSAfeM => SomeStateData -> FSAfeM SomeStateData
 tryAdvanceState (SomeStateData state) = do
   ctx <- liftBot ask
   case parseTransition state ctx of
     Nothing -> return $ SomeStateData state
-    Just (SomeTransition transition) ->
-      SomeStateData <$> handleTransition transition state
+    Just (SomeTransition transition) -> do
+      (state' :: StateData to) <- handleTransition transition state
+      toMessageData state' >>= \case
+        Aboba a -> do
+          let msg = renderMessage (Proxy @(StateMessage to)) a
+          reply msg
+      return $ SomeStateData state'
 
 startBotGeneric
   :: (Tg.User -> state -> Tg.Update -> ClientM state)
