@@ -26,10 +26,10 @@ class IsState a where
   data StateData a :: Type
   parseTransition :: StateData a -> BotContext -> Maybe (SomeTransitionFrom a)
   type StateMessage a :: Message
-  toMessageData :: StateData a -> FSAfeM (Aboba (Proper' (StateMessage a)))
-  default toMessageData :: (IsMessage (Proper' (StateMessage a)) '[], Monad FSAfeM)
-                        => StateData a -> FSAfeM (Aboba (Proper' (StateMessage a)))
-  toMessageData _ = return $ Aboba EmptyTaggedContext
+  extractMessageContext :: StateData a -> FSAfeM (Aboba (Proper' (StateMessage a)))
+  default extractMessageContext :: (IsMessage (Proper' (StateMessage a)) '[], Applicative FSAfeM)
+                                => StateData a -> FSAfeM (Aboba (Proper' (StateMessage a)))
+  extractMessageContext _ = pure $ Aboba EmptyTaggedContext
 
 type Aboba :: ProperMessage -> Type
 data Aboba a where

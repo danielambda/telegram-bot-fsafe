@@ -2,8 +2,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
@@ -12,21 +10,30 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE DerivingVia #-}
 
 module Telegram.Bot.FSAfe.DSL
-  ( ProperMessage(..), Message(..), Proper
-  , Proper'
+  ( ProperMessage(..), Message(..)
+  , Proper, Proper'
   , IsMessage(..)
   , TextEntity(..)
   , MessageLine(..)
-  , ButtonEntity(..), CallbackBtn
+  , ButtonEntity(..), CallbackBtn, UnitCallbackBtn, CallbackButtons
   , type (:|:), type (:\)
   , RenameTag
   , AsMessage
   , renderMessage
+  , IsCallbackData(..)
+  , ReadShow(..)
+  , IsUnit(..)
+  , HasTaggedContext(..)
+  , HasFields(..)
+  , Fields(..)
   ) where
 
-import qualified Data.Text as T (Text, pack, unlines)
+import qualified Data.Text as T (Text, pack, unlines, unpack)
 import Telegram.Bot.API (InlineKeyboardButton, SomeReplyMarkup (..), InlineKeyboardMarkup (..))
 
 import Data.Kind (Type, Constraint)
@@ -37,28 +44,38 @@ import GHC.Base (Symbol)
 import GHC.TypeLits (KnownSymbol, symbolVal, TypeError, ErrorMessage(..))
 
 import Telegram.Bot.FSAfe.Reply (ReplyMessage(..), toReplyMessage, callbackButton)
-import Telegram.Bot.FSAfe.TaggedContext (TaggedContext, TaggedContextHasEntry (..))
+import Telegram.Bot.FSAfe.TaggedContext (TaggedContext (..), TaggedContextHasEntry (..), appendTaggedContext, andLet, Tagged (..))
 import Telegram.Bot.FSAfe.FirstClassFamilies (Exp, Eval, Map, type (++), type (==))
+import Text.Read (readMaybe)
+import GHC.Generics
+
+import GHC.Records (HasField(..))
 
 data ProperMessage = PMsg (NonEmpty [TextEntity]) [[ButtonEntity]]
 
-data TextEntity where
-  Txt :: Symbol -> TextEntity
-  Var :: Symbol -> TextEntity
+data TextEntity
+  = Txt Symbol
+  | Var Symbol
+  | VarShow Symbol
 
-data ButtonEntity where
-  CallbackBtn' :: [TextEntity] -> [TextEntity] -> ButtonEntity
-  CallbackButtons :: Type -> Symbol -> ButtonEntity
+data ButtonEntity
+  = CallbackBtn' [TextEntity] Type Symbol
+  | UnitCallbackBtn' [TextEntity] Type
+  | CallbackButtons' [TextEntity] Type Symbol
   -- UrlBtn :: [TextEntity] -> [TextEntity] -> Button
   -- WebAppBtn, LoginUrlBtn, SwitchInlineQueryBtn,
   -- SwitchInlineQueryCurrentChatBtn, SwitchInlineQueryChosenChatBtn
   -- CallbackGameBtn, PayBtn
 
+type CallbackBtn a = CallbackBtn' (AsTextLine a)
+type UnitCallbackBtn a = UnitCallbackBtn' (AsTextLine a)
+type CallbackButtons a = CallbackButtons' (AsTextLine a)
+
 data Message = Msg [[TextEntity]] [[ButtonEntity]]
 
-data MessageLine where
-  MTL :: [TextEntity] -> MessageLine
-  MBL :: [ButtonEntity] -> MessageLine
+data MessageLine
+  = MTL [TextEntity]
+  | MBL [ButtonEntity]
 
 infixr 9 :|:
 type (:|:) :: k -> l -> MessageLine
@@ -103,10 +120,6 @@ type family JoinMessages m1 m2 where
   JoinMessages (Msg tls bls1) (Msg '[] bls2) = Msg tls (bls1 ++ bls2)
   JoinMessages (Msg _ (_:_))  (Msg (_:_) _)  = TypeError (Text "Cannot have text below buttons")
 
-type CallbackBtn :: k -> l -> ButtonEntity
-type family CallbackBtn a b where
-  CallbackBtn a b = CallbackBtn' (AsTextLine a) (AsTextLine b)
-
 type AsTextLine :: k -> [TextEntity]
 type family AsTextLine a where
   AsTextLine (MTL a) = a
@@ -150,8 +163,8 @@ type instance Eval (RenameTextEntityTag _ _ (Txt a)) = Txt a
 
 type RenameBLTag x y = Map (RenameButtonTag x y)
 data RenameButtonTag :: Symbol -> Symbol -> ButtonEntity -> Exp ButtonEntity
-type instance Eval (RenameButtonTag x y (CallbackBtn' a b)) =
-  CallbackBtn' (Eval (RenameTLTag x y a)) (Eval (RenameTLTag x y b))
+type instance Eval (RenameButtonTag x y (CallbackBtn' a b c)) =
+  CallbackBtn' (Eval (RenameTLTag x y a)) b c
 
 type IsMessage :: ProperMessage -> [(Symbol, Type)] -> Constraint
 class IsMessage a ctx where
@@ -198,6 +211,10 @@ instance TaggedContextHasEntry ctx a T.Text
       => IsTextLine (Var a : '[]) ctx where
   getTextLine _ = getTaggedContextEntry (Proxy @a)
 
+instance (Show show ,TaggedContextHasEntry ctx a show)
+      => IsTextLine (VarShow a : '[]) ctx where
+  getTextLine _ = T.pack . show . getTaggedContextEntry (Proxy @a)
+
 instance (KnownSymbol s, IsTextLine (l : ls) ctx)
       => IsTextLine (Txt s : l : ls) ctx where
   getTextLine _ tlData
@@ -229,16 +246,97 @@ type IsButton :: ButtonEntity -> [(Symbol, Type)] -> Constraint
 class IsButton a ctx where
   getButton :: Proxy a -> TaggedContext ctx -> [InlineKeyboardButton]
 
-instance (IsTextLine l ctx, IsTextLine c ctx)
-      => IsButton (CallbackBtn' l c) ctx where
+instance ( IsCallbackData a
+         , TaggedContextHasEntry ctx s a
+         , HasTaggedContext ctx0 a
+         , IsTextLine l (ctx0 ++ ctx)
+         )
+      => IsButton (CallbackBtn' l a s) ctx where
   getButton _ = do
-    label <- getTextLine (Proxy @l)
-    callback <- getTextLine (Proxy @c)
+    a <- getTaggedContextEntry (Proxy @s)
+    let ctx0 = getTaggedContext a
+    label <- getTextLine (Proxy @l) . appendTaggedContext ctx0
+    let callback = toCallbackData a
     return [callbackButton label callback]
 
-instance (TaggedContextHasEntry ctx s (a -> InlineKeyboardButton, [a]))
-      => IsButton (CallbackButtons a s) ctx where
+instance ( IsCallbackData t
+         , IsUnit t
+         , IsTextLine tl ctx
+         )
+      => IsButton (UnitCallbackBtn' tl t) ctx where
   getButton _ = do
-    (f, xs) <- getTaggedContextEntry (Proxy @s)
-    return $ f <$> xs
+    label <- getTextLine (Proxy @tl)
+    let callback = toCallbackData $ unitValue @t
+    return [callbackButton label callback]
 
+instance ( IsTextLine tl (ctx0 ++ ctx)
+         , HasTaggedContext ctx0 a
+         , IsCallbackData a
+         , TaggedContextHasEntry ctx s [a]
+         )
+      => IsButton (CallbackButtons' tl a s) ctx where
+  getButton _ =
+    traverse f =<< getTaggedContextEntry (Proxy @s)
+    where
+      f :: a -> TaggedContext ctx -> InlineKeyboardButton
+      f a = do
+        let ctx0 = getTaggedContext a
+        label <- getTextLine (Proxy @tl) . appendTaggedContext ctx0
+        let callback = toCallbackData a
+        return $ callbackButton label callback
+
+
+class HasTaggedContext ctx a | a -> ctx where
+  getTaggedContext :: a -> TaggedContext ctx
+
+class IsCallbackData a where
+  toCallbackData :: a -> T.Text
+  fromCallbackData :: T.Text -> Maybe a
+
+newtype ReadShow a = ReadShow a
+  deriving (Read, Show, Eq)
+
+instance (Read a, Show a) => IsCallbackData (ReadShow a) where
+  toCallbackData = T.pack . show
+  fromCallbackData = readMaybe . T.unpack
+
+instance IsCallbackData T.Text where
+  toCallbackData = id
+  fromCallbackData = pure
+
+instance IsCallbackData String where
+  toCallbackData = T.pack
+  fromCallbackData = pure . T.unpack
+
+class IsUnit u where
+  unitValue :: u
+
+  default unitValue :: (Generic u, GIsUnit (Rep u)) => u
+  unitValue = to gunitValue
+
+class GIsUnit u where
+  gunitValue :: u a
+
+instance GIsUnit U1 where
+  gunitValue = U1
+
+class HasFields fields a where
+  getFields :: a -> TaggedContext fields
+
+instance {-# OVERLAPPABLE #-}
+         HasFields '[] a where
+  getFields _ = EmptyTaggedContext
+
+instance HasField name a ty
+      => HasFields '[ '(name, ty)] a where
+  getFields = andLet @name . getField @name
+
+instance {-# OVERLAPS #-}
+         (HasField name a ty, HasFields fields a)
+      => HasFields ('(name, ty) : fields) a where
+  getFields a = Tagged @name (getField @name a) :. getFields a
+
+newtype Fields fields a = Fields a
+
+instance HasFields fields a => HasTaggedContext fields (Fields fields a)  where
+  getTaggedContext (Fields a) = getFields a

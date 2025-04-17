@@ -28,6 +28,12 @@
       in {
         devShells.default = pkgs.mkShell {
           inherit packages;
+
+          shellHook = ''
+            set -a
+            source ./.env
+            set +a
+          '';
         };
       });
 }

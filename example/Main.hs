@@ -8,6 +8,8 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-} -- for FSAfeM type instance
@@ -26,7 +28,7 @@ import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.Reader (ReaderT (..), MonadReader (..), asks)
 import Control.Applicative ((<|>))
 import qualified Data.Text as T
-import Telegram.Bot.FSAfe (andLet, let', TextEntity(..), (:|:), CallbackBtn, AsMessage, (:\), ButtonEntity(..), TaggedContext(..), Tagged(..), Aboba(..))
+import Telegram.Bot.FSAfe (CallbackButtons, HasTaggedContext(..), Fields(..), UnitCallbackBtn, IsUnit(..), ReadShow(..), IsCallbackData, andLet, let', TextEntity(..), (:|:), CallbackBtn, AsMessage, (:\), ButtonEntity(..), TaggedContext(..), Tagged(..), Aboba(..))
 
 tshow :: Show a => a -> T.Text
 tshow = T.pack . show
@@ -35,7 +37,9 @@ data PizzaOrder
   = PizzaOrder
   { size :: PizzaSize
   , toppings :: [Topping]
-  } deriving (Show)
+  } deriving (Read, Show)
+    deriving IsCallbackData via ReadShow PizzaOrder
+    deriving (HasTaggedContext '[ '("size", PizzaSize)]) via Fields '[ '("size", PizzaSize)] PizzaOrder
 
 data PizzaContext
   = PizzaContext
@@ -45,6 +49,10 @@ data PizzaContext
 
 data PizzaSize = ExtraSmall | Small | Medium | Large | ExtraLarge
   deriving (Show, Read, Eq, Enum, Bounded)
+  deriving IsCallbackData via ReadShow PizzaSize
+
+instance HasTaggedContext '[ '("self", PizzaSize)] PizzaSize where
+  getTaggedContext = andLet @"self"
 
 data Topping = Cheese | Pepperoni | Mushrooms | Olives | Pineapples
   deriving (Show, Read, Eq, Enum, Bounded)
@@ -70,36 +78,33 @@ instance IsState 'SelectingSize0 where
 
   type StateMessage 'SelectingSize0
     =  "Please, select size of your pizza:"
-    :\ CallbackButtons PizzaSize "selectSize"
+    :\ CallbackButtons (VarShow "size") SelectSize "pizzaSizes"
 
   parseTransition SelectingSize0D = runBotContextParser
     $ SomeTransition <$> callbackQueryDataRead @SelectSize
 
-  toMessageData SelectingSize0D = do
+  extractMessageContext SelectingSize0D = do
     availableSizes <- asks availableSizes
-    return $ Aboba $ Tagged @"selectSize" (f, availableSizes) :. EmptyTaggedContext
-    where f s = asCallbackButton (tshow s) (SelectSize s)
+    return $ Aboba $ Tagged @"pizzaSizes" (SelectSize <$> availableSizes) :. EmptyTaggedContext
 
 instance IsState 'SelectingSize where
   newtype StateData 'SelectingSize = SelectingSizeD PizzaSize
 
   type StateMessage 'SelectingSize
     =  "You selected " :|: Var "selectedSize" :|: " size"
-    :\ CallbackButtons PizzaSize "selectSize"
-    :\ CallbackBtn "Confirm" "Confirm"
-    -- TODO make this into actual type-safe transition callback
+    :\ CallbackButtons (VarShow "size") SelectSize "pizzaSizes"
+    :\ UnitCallbackBtn "Confirm" Confirm
 
   parseTransition SelectingSizeD{} = runBotContextParser
     $   SomeTransition <$> callbackQueryDataRead @SelectSize
     <|> SomeTransition <$> callbackQueryDataRead @Confirm
     <|> SomeTransition Confirm <$ command "confirm"
 
-  toMessageData (SelectingSizeD selectedSize) = do
+  extractMessageContext (SelectingSizeD selectedSize) = do
     availableSizes <- asks availableSizes
     return $ Aboba
       $ let'   @"selectedSize" (tshow selectedSize)
-      $ andLet @"selectSize" (f, filter (/= selectedSize) availableSizes)
-    where f s = asCallbackButton (tshow s) (SelectSize s)
+      $ andLet @"pizzaSizes" (SelectSize <$> filter (/= selectedSize) availableSizes)
 
 instance IsState 'SelectingToppings where
   data StateData 'SelectingToppings
@@ -110,10 +115,10 @@ instance IsState 'SelectingToppings where
 
   type StateMessage 'SelectingToppings
     =  "Please, select toppings for your pizza:"
-    :\ CallbackButtons Topping "selectTopping"
-    :\ CallbackBtn "Confirm" "Confirm"
+    -- :\ CallbackButtons Topping "selectTopping" -- TODO  ?
+    :\ UnitCallbackBtn "Confirm" Confirm
 
-  toMessageData SelectingToppingsD{toppings} = do
+  extractMessageContext SelectingToppingsD{toppings} = do
     availableToppings <- asks availableToppings
     return $ Aboba
       $ andLet @"selectTopping" (f, availableToppings)
@@ -131,24 +136,34 @@ instance IsState 'ConfirmingOrder where
 
   type StateMessage 'ConfirmingOrder
     =  AsMessage (Var "pizza")
-    :\ CallbackBtn "Confirm" "Confirm"
+    :\ CallbackBtn (VarShow "size") PizzaOrder "order"
+    :\ UnitCallbackBtn "Confirm" Confirm
 
   parseTransition ConfirmingOrderD{} = runBotContextParser
     $   SomeTransition <$> callbackQueryDataRead @Confirm
     <|> SomeTransition Confirm <$ command "confirm"
 
-  toMessageData (ConfirmingOrderD pizza) = do
-    return $ Aboba $ andLet @"pizza" (tshow pizza)
+  extractMessageContext (ConfirmingOrderD pizza) = return $ Aboba
+    $ let' @"order" PizzaOrder{size = Medium, toppings=[]}
+    $ andLet @"pizza" (tshow pizza)
 
 data Confirm = Confirm
   deriving (Show, Read)
+  deriving IsCallbackData via ReadShow Confirm
+
+instance IsUnit Confirm where
+  unitValue = Confirm
 
 data StartSelectingSize = StartSelectingSize
 instance IsTransition StartSelectingSize 'InitialState 'SelectingSize0 where
   handleTransition StartSelectingSize InitialStateD =
     pure SelectingSize0D
 
-newtype SelectSize = SelectSize PizzaSize deriving (Show, Read)
+newtype SelectSize = SelectSize { size :: PizzaSize }
+  deriving (Show, Read)
+  deriving IsCallbackData via ReadShow SelectSize
+  deriving (HasTaggedContext '[ '("size", PizzaSize)]) via Fields '[ '("size", PizzaSize)] SelectSize
+
 instance IsTransition SelectSize 'SelectingSize0 'SelectingSize where
   handleTransition (SelectSize size) SelectingSize0D{} =
     pure $ SelectingSizeD size
@@ -161,12 +176,16 @@ instance IsTransition Confirm 'SelectingSize 'SelectingToppings where
   handleTransition Confirm (SelectingSizeD size) =
     pure $ SelectingToppingsD size []
 
-newtype AddTopping = AddTopping Topping deriving (Show, Read)
+newtype AddTopping = AddTopping Topping
+  deriving (Show, Read)
+  deriving IsCallbackData via ReadShow AddTopping
 instance IsTransition AddTopping 'SelectingToppings 'SelectingToppings where
   handleTransition (AddTopping topping) SelectingToppingsD{toppings, ..} =
     pure $ SelectingToppingsD{toppings = topping:toppings, ..}
 
-newtype RemoveTopping = RemoveTopping Topping deriving (Show, Read)
+newtype RemoveTopping = RemoveTopping Topping
+  deriving (Show, Read)
+  deriving IsCallbackData via ReadShow RemoveTopping
 instance IsTransition RemoveTopping 'SelectingToppings 'SelectingToppings where
   handleTransition (RemoveTopping topping) SelectingToppingsD{toppings, ..} =
     pure $ SelectingToppingsD{toppings = filter (/= topping) toppings, ..}

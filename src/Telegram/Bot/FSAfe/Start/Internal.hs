@@ -48,7 +48,7 @@ tryAdvanceState (SomeStateData state) = do
     Nothing -> return $ SomeStateData state
     Just (SomeTransition transition) -> do
       (state' :: StateData to) <- handleTransition transition state
-      toMessageData state' >>= \case
+      extractMessageContext state' >>= \case
         Aboba a -> do
           let msg = renderMessage (Proxy @(StateMessage to)) a
           reply msg

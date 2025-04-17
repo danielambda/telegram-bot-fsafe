@@ -19,7 +19,7 @@ module Telegram.Bot.FSAfe.TaggedContext
   ( TaggedContext (..)
   , TaggedContextHasEntry (..)
   , Tagged (..)
-  , (.++), type (++)
+  , (.++), type (++), appendTaggedContext
   , let', andLet
   , Rename, rename
   ) where
@@ -77,6 +77,9 @@ infixr 5 .++
 (.++) :: TaggedContext a -> TaggedContext b -> TaggedContext (a ++ b)
 EmptyTaggedContext .++ b = b
 (a :. as)   .++ b = a :. (as .++ b)
+
+appendTaggedContext :: TaggedContext a -> TaggedContext b -> TaggedContext (a ++ b)
+appendTaggedContext = (.++)
 
 -- | getTaggedContextEntry returns leftmost entry of the key
 type TaggedContextHasEntry :: [(Symbol, Type)] -> Symbol -> Type -> Constraint

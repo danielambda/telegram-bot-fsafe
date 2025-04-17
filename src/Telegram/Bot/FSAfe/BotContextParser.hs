@@ -23,9 +23,9 @@ import Telegram.Bot.API
 
 import Control.Monad ((<=<))
 import Control.Monad.Reader (ReaderT(..), asks)
-import Text.Read (readMaybe)
 import Data.Char (isSpace)
 import Telegram.Bot.FSAfe.BotM (BotContext (..))
+import Telegram.Bot.FSAfe.DSL (IsCallbackData (fromCallbackData))
 
 type BotContextParser a = ReaderT BotContext Maybe a
 
@@ -48,7 +48,7 @@ plainText = do
 command :: Text -> BotContextParser Text
 command commandName = do
   (cmd, rest) <- T.break isSpace <$> text
-  mBotName <- asks (userUsername . botContextUser)
+  mBotName <- asks $ userUsername . botContextUser
   let allowedCmds = case mBotName of
         Nothing ->      [ "/" <> commandName ]
         Just botName -> [ "/" <> commandName
@@ -59,9 +59,9 @@ command commandName = do
     else fail "not that command"
 
 -- | Obtain 'CallbackQuery' @data@ associated with the callback button in an inline keyboard if present in 'Update' message.
-callbackQueryDataRead :: Read a => BotContextParser a
+callbackQueryDataRead :: IsCallbackData a => BotContextParser a
 callbackQueryDataRead = mkBotContextParser
-  $   readMaybe . T.unpack
+  $   fromCallbackData
   <=< callbackQueryData
   <=< updateCallbackQuery
   .   botContextUpdate
