@@ -8,8 +8,7 @@
 {-# LANGUAGE DataKinds #-}
 
 module Telegram.Bot.FSAfe.FSA
-  ( FSAfeM
-  , IsState(..),      SomeStateData(..)
+  ( IsState(..),      SomeStateData(..)
   , IsTransition(..), SomeTransitionFrom(..)
   , Aboba(..)
   ) where
@@ -19,30 +18,29 @@ import Telegram.Bot.FSAfe.BotM (BotContext)
 import Telegram.Bot.FSAfe.TaggedContext (TaggedContext (EmptyTaggedContext))
 import Telegram.Bot.FSAfe.DSL (IsMessage, ProperMessage, Message, Proper')
 
-type family FSAfeM :: Type -> Type
-
-type IsState :: k -> Constraint
-class IsState a where
+type IsState :: k -> (Type -> Type) -> Constraint
+class IsState a m | a -> m where
   data StateData a :: Type
-  parseTransition :: StateData a -> BotContext -> Maybe (SomeTransitionFrom a)
+  parseTransition :: StateData a -> BotContext -> Maybe (SomeTransitionFrom m a)
   type StateMessage a :: Message
-  extractMessageContext :: StateData a -> FSAfeM (Aboba (Proper' (StateMessage a)))
-  default extractMessageContext :: (IsMessage (Proper' (StateMessage a)) '[], Applicative FSAfeM)
-                                => StateData a -> FSAfeM (Aboba (Proper' (StateMessage a)))
+  extractMessageContext :: StateData a -> m (Aboba (Proper' (StateMessage a)))
+  default extractMessageContext :: (Applicative m, IsMessage (Proper' (StateMessage a)) '[])
+                                => StateData a -> m (Aboba (Proper' (StateMessage a)))
   extractMessageContext _ = pure $ Aboba EmptyTaggedContext
 
 type Aboba :: ProperMessage -> Type
 data Aboba a where
   Aboba :: IsMessage a ctx => TaggedContext ctx -> Aboba a
 
-data SomeStateData where
-  SomeStateData :: IsState a => StateData a -> SomeStateData
+type SomeStateData :: (Type -> Type) -> Type
+data SomeStateData m where
+  SomeStateData :: IsState a m => StateData a -> SomeStateData m
 
-type IsTransition :: Type -> k -> k -> Constraint
-class (IsState from, IsState to) => IsTransition t from to | from t -> to where
-  handleTransition :: t -> StateData from -> FSAfeM (StateData to)
+type IsTransition :: Type -> k -> (Type -> Type) -> k -> Constraint
+class (IsState from m, IsState to m) => IsTransition t from m to | from t -> m, from t -> to where
+  handleTransition :: t -> StateData from -> m (StateData to)
 
-type SomeTransitionFrom :: k -> Type
-data SomeTransitionFrom from where
-  SomeTransition :: IsTransition t from to => t -> SomeTransitionFrom from
+type SomeTransitionFrom :: (Type -> Type) -> k -> Type
+data SomeTransitionFrom m from where
+  SomeTransition :: IsTransition t from m to => t -> SomeTransitionFrom m from
 

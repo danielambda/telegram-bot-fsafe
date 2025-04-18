@@ -9,7 +9,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE UndecidableSuperClasses #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE DerivingVia #-}
@@ -30,7 +29,9 @@ module Telegram.Bot.FSAfe.DSL
   , IsUnit(..)
   , HasTaggedContext(..)
   , HasFields(..)
-  , Fields(..)
+  , TypedFields(..)
+  , RecordHasTaggedContext(..)
+  , RecordFields
   ) where
 
 import qualified Data.Text as T (Text, pack, unlines, unpack)
@@ -44,7 +45,7 @@ import GHC.Base (Symbol)
 import GHC.TypeLits (KnownSymbol, symbolVal, TypeError, ErrorMessage(..))
 
 import Telegram.Bot.FSAfe.Reply (ReplyMessage(..), toReplyMessage, callbackButton)
-import Telegram.Bot.FSAfe.TaggedContext (TaggedContext (..), TaggedContextHasEntry (..), appendTaggedContext, andLet, Tagged (..))
+import Telegram.Bot.FSAfe.TaggedContext (TaggedContext (..), TaggedContextHasEntry (..), appendTaggedContext, Tagged (..))
 import Telegram.Bot.FSAfe.FirstClassFamilies (Exp, Eval, Map, type (++), type (==))
 import Text.Read (readMaybe)
 import GHC.Generics
@@ -62,10 +63,6 @@ data ButtonEntity
   = CallbackBtn' [TextEntity] Type Symbol
   | UnitCallbackBtn' [TextEntity] Type
   | CallbackButtons' [TextEntity] Type Symbol
-  -- UrlBtn :: [TextEntity] -> [TextEntity] -> Button
-  -- WebAppBtn, LoginUrlBtn, SwitchInlineQueryBtn,
-  -- SwitchInlineQueryCurrentChatBtn, SwitchInlineQueryChosenChatBtn
-  -- CallbackGameBtn, PayBtn
 
 type CallbackBtn a = CallbackBtn' (AsTextLine a)
 type UnitCallbackBtn a = UnitCallbackBtn' (AsTextLine a)
@@ -211,7 +208,7 @@ instance TaggedContextHasEntry ctx a T.Text
       => IsTextLine (Var a : '[]) ctx where
   getTextLine _ = getTaggedContextEntry (Proxy @a)
 
-instance (Show show ,TaggedContextHasEntry ctx a show)
+instance (Show show, TaggedContextHasEntry ctx a show)
       => IsTextLine (VarShow a : '[]) ctx where
   getTextLine _ = T.pack . show . getTaggedContextEntry (Proxy @a)
 
@@ -327,16 +324,45 @@ instance {-# OVERLAPPABLE #-}
          HasFields '[] a where
   getFields _ = EmptyTaggedContext
 
-instance HasField name a ty
-      => HasFields '[ '(name, ty)] a where
-  getFields = andLet @name . getField @name
-
 instance {-# OVERLAPS #-}
          (HasField name a ty, HasFields fields a)
       => HasFields ('(name, ty) : fields) a where
   getFields a = Tagged @name (getField @name a) :. getFields a
 
+type TypedFields :: [(Symbol, Type)] -> Type -> Type
+newtype TypedFields fields a = TypedFields a
+
+instance HasFields fields a
+      => HasTaggedContext fields (TypedFields fields a)  where
+  getTaggedContext (TypedFields a) = getFields a
+
+type Fields :: [Symbol] -> Type -> Type
 newtype Fields fields a = Fields a
 
-instance HasFields fields a => HasTaggedContext fields (Fields fields a)  where
+instance {-# OVERLAPS #-}
+         (HasFields fields a, fields ~ '[])
+      => HasTaggedContext fields (Fields fieldNames a) where
   getTaggedContext (Fields a) = getFields a
+
+class RecordHasTaggedContext a where
+  getRecordTaggedContext :: a -> TaggedContext (RecordFields a)
+
+instance {-# OVERLAPPABLE #-}
+         (HasFields fields a, fields ~ RecordFields a)
+      => HasTaggedContext fields a where
+  getTaggedContext = getFields
+
+type RecordFields a = RecordFields' (Rep a)
+type RecordFields' :: (Type -> Type) -> [(Symbol, Type)]
+type family RecordFields' a where
+  RecordFields' (M1 S (MetaSel (Just name) _ _ _) (K1 _ a)) = '[ '(name, a)]
+  RecordFields' (M1 D (MetaData dataName _ _ _) x) = RecordFields' x
+  RecordFields' (M1 C (MetaCons consName _ _) x)   = RecordFields' x
+  RecordFields' (x :*: y) = RecordFields' x ++ RecordFields' y
+  RecordFields' _ = '[]
+
+-- type TypeFields fields a = TypeFields' fields (Rep a)
+-- type TypeFields' :: [Symbol] -> (Type -> Type) -> [(Symbol, Type)]
+-- type family TypeFields' fields a where
+--   TypeFields' '[]      _ = '[]
+--   TypeFields' (x : xs) a = '(x, TODO) : TypeFields' xs a
