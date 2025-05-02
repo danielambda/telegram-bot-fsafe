@@ -24,7 +24,7 @@ import Servant.Client (ClientError, ClientM, runClientM)
 
 import Telegram.Bot.FSAfe.FSA
   ( SomeTransitionFrom(..), SomeStateData(..), parseTransition, IsTransition(..)
-  , IsState (..), Aboba (..)
+  , IsState (..), MessageContext (..)
   )
 import Telegram.Bot.FSAfe.BotM (BotM)
 import Control.Monad.Error.Class (catchError)
@@ -51,7 +51,7 @@ tryAdvanceState nt (SomeStateData state) = do
     Just (SomeTransition transition) -> do
       (state' :: StateData to) <- nt $ handleTransition transition state
       nt (extractMessageContext state') >>= \case
-        Aboba a -> do
+        MessageContext a -> do
           let msg = renderMessage (Proxy @(StateMessage to)) a
           reply msg
       return $ SomeStateData state'

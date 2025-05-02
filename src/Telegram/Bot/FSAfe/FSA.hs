@@ -10,7 +10,7 @@
 module Telegram.Bot.FSAfe.FSA
   ( IsState(..),      SomeStateData(..)
   , IsTransition(..), SomeTransitionFrom(..)
-  , Aboba(..)
+  , MessageContext(..)
   ) where
 
 import Data.Kind (Type, Constraint)
@@ -23,14 +23,16 @@ class IsState a m | a -> m where
   data StateData a :: Type
   parseTransition :: StateData a -> BotContext -> Maybe (SomeTransitionFrom m a)
   type StateMessage a :: Message
-  extractMessageContext :: StateData a -> m (Aboba (Proper' (StateMessage a)))
+  extractMessageContext :: StateData a -> m (MessageContext (Proper' (StateMessage a)))
+  -- TODO make this default more generic via creating help typeclass,
+  -- there should be 2 default cases: empty and when fields of StateData are sufficient
   default extractMessageContext :: (Applicative m, IsMessage (Proper' (StateMessage a)) '[])
-                                => StateData a -> m (Aboba (Proper' (StateMessage a)))
-  extractMessageContext _ = pure $ Aboba EmptyTaggedContext
+                                => StateData a -> m (MessageContext (Proper' (StateMessage a)))
+  extractMessageContext _ = pure $ MessageContext EmptyTaggedContext
 
-type Aboba :: ProperMessage -> Type
-data Aboba a where
-  Aboba :: IsMessage a ctx => TaggedContext ctx -> Aboba a
+type MessageContext :: ProperMessage -> Type
+data MessageContext a where
+  MessageContext :: IsMessage a ctx => TaggedContext ctx -> MessageContext a
 
 type SomeStateData :: (Type -> Type) -> Type
 data SomeStateData m where

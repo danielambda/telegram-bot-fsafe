@@ -48,7 +48,7 @@ import Telegram.Bot.FSAfe.Reply (ReplyMessage(..), toReplyMessage, callbackButto
 import Telegram.Bot.FSAfe.TaggedContext (TaggedContext (..), TaggedContextHasEntry (..), appendTaggedContext, Tagged (..))
 import Telegram.Bot.FSAfe.FirstClassFamilies (Exp, Eval, Map, type (++), type (==))
 import Text.Read (readMaybe)
-import GHC.Generics
+import GHC.Generics (Generic(..), U1(..), K1, M1, type (:*:), D, C, S, Meta(..))
 
 import GHC.Records (HasField(..))
 
@@ -281,7 +281,6 @@ instance ( IsTextLine tl (ctx0 ++ ctx)
         label <- getTextLine (Proxy @tl) . appendTaggedContext ctx0
         let callback = toCallbackData a
         return $ callbackButton label callback
-
 
 class HasTaggedContext ctx a | a -> ctx where
   getTaggedContext :: a -> TaggedContext ctx

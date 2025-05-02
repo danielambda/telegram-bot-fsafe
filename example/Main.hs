@@ -24,7 +24,7 @@ import Telegram.Bot.API as Tg (updateChatId)
 import Control.Monad.Reader (Reader, runReader, MonadReader (..), asks)
 import Control.Applicative ((<|>))
 import qualified Data.Text as T
-import Telegram.Bot.FSAfe (CallbackButtons, HasTaggedContext(..), UnitCallbackBtn, IsUnit(..), ReadShow(..), IsCallbackData, andLet, let', TextEntity(..), (:|:), CallbackBtn, AsMessage, (:\), TaggedContext(..), Tagged(..), Aboba(..))
+import Telegram.Bot.FSAfe (CallbackButtons, HasTaggedContext(..), UnitCallbackBtn, IsUnit(..), ReadShow(..), IsCallbackData, andLet, let', TextEntity(..), (:|:), CallbackBtn, AsMessage, (:\), TaggedContext(..), Tagged(..), MessageContext(..))
 import GHC.Generics (Generic)
 
 tshow :: Show a => a -> T.Text
@@ -81,7 +81,7 @@ instance IsState 'SelectingSize0 AppM where
 
   extractMessageContext SelectingSize0D = do
     availableSizes <- asks availableSizes
-    return $ Aboba $ Tagged @"pizzaSizes" (SelectSize <$> availableSizes) :. EmptyTaggedContext
+    return $ MessageContext $ Tagged @"pizzaSizes" (SelectSize <$> availableSizes) :. EmptyTaggedContext
 
 instance IsState 'SelectingSize AppM where
   newtype StateData 'SelectingSize = SelectingSizeD PizzaSize
@@ -98,7 +98,7 @@ instance IsState 'SelectingSize AppM where
 
   extractMessageContext (SelectingSizeD selectedSize) = do
     availableSizes <- asks availableSizes
-    return $ Aboba
+    return $ MessageContext
       $ let'   @"selectedSize" (tshow selectedSize)
       $ andLet @"pizzaSizes" (SelectSize <$> filter (/= selectedSize) availableSizes)
 
@@ -116,7 +116,7 @@ instance IsState 'SelectingToppings AppM where
 
   extractMessageContext SelectingToppingsD{toppings} = do
     availableToppings <- asks availableToppings
-    return $ Aboba
+    return $ MessageContext
       $ andLet @"selectTopping" (f, availableToppings)
     where f s = if s `elem` toppings
             then asCallbackButton ("✓" <> tshow s) (RemoveTopping s)
@@ -139,7 +139,7 @@ instance IsState 'ConfirmingOrder AppM where
     $   SomeTransition <$> callbackQueryDataRead @Confirm
     <|> SomeTransition Confirm <$ command "confirm"
 
-  extractMessageContext (ConfirmingOrderD pizza) = return $ Aboba
+  extractMessageContext (ConfirmingOrderD pizza) = return $ MessageContext
     $ let'   @"order" PizzaOrder{size = Medium, toppings=[]}
     $ andLet @"pizza" (tshow pizza)
 
