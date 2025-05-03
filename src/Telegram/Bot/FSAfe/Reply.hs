@@ -14,13 +14,15 @@ module Telegram.Bot.FSAfe.Reply where
 
 import Data.Text (Text)
 import Data.Text as T (pack)
-import Telegram.Bot.API hiding (editMessageText, editMessageReplyMarkup)
+import Telegram.Bot.API hiding (Message, editMessageText, editMessageReplyMarkup)
 
 import Control.Applicative ((<|>))
 import Control.Monad (void, (<=<))
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Reader (asks)
 import GHC.Generics (Generic)
+
+import Telegram.Bot.DSL.Message (Message(..), textMessage)
 
 import Telegram.Bot.FSAfe.RunTG (runTG)
 import Telegram.Bot.FSAfe.BotM (BotContext(..), MonadBot (..))
@@ -60,10 +62,13 @@ data ReplyMessage = ReplyMessage
   , replyMessageReplyMarkup           :: Maybe SomeReplyMarkup -- ^ Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
   } deriving (Generic)
 
--- | Create a 'ReplyMessage' with just some 'Text' message.
-toReplyMessage :: Text -> ReplyMessage
-toReplyMessage text
-  = ReplyMessage text Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+toReplyMessage :: Message -> ReplyMessage
+toReplyMessage Message{..}
+  = ReplyMessage messageText
+  Nothing messageParseMode
+  Nothing messageLinkPreviewOptions
+  Nothing Nothing Nothing
+  Nothing messageReplyMarkup
 
 replyMessageToSendMessageRequest :: SomeChatId -> ReplyMessage -> SendMessageRequest
 replyMessageToSendMessageRequest someChatId ReplyMessage{..} = SendMessageRequest
@@ -95,7 +100,7 @@ reply rmsg = do
     Nothing     -> liftIO $ putStrLn "No chat to reply to"
 
 replyText :: MonadBot m => Text -> m ()
-replyText = reply . toReplyMessage
+replyText = reply . toReplyMessage . textMessage
 
 data EditMessage = EditMessage
   { editMessageText                  :: Text
@@ -133,7 +138,7 @@ editMessageToEditMessageTextRequest editMessageId EditMessage{..}
             -> (Nothing, Nothing, Just messageId)
 
 editMessageToReplyMessage :: EditMessage -> ReplyMessage
-editMessageToReplyMessage EditMessage{..} = (toReplyMessage editMessageText)
+editMessageToReplyMessage EditMessage{..} = (toReplyMessage $ textMessage editMessageText)
   { replyMessageParseMode = editMessageParseMode
   , replyMessageLinkPreviewOptions = editMessageLinkPreviewOptions
   , replyMessageReplyMarkup = editMessageReplyMarkup

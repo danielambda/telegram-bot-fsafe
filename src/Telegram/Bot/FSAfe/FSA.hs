@@ -14,15 +14,17 @@ module Telegram.Bot.FSAfe.FSA
   ) where
 
 import Data.Kind (Type, Constraint)
+
+import Telegram.Bot.DSL (IsMessage, ProperMessageKind, MessageKind, Proper')
+import Telegram.Bot.DSL.TaggedContext  (TaggedContext (..))
+
 import Telegram.Bot.FSAfe.BotM (BotContext)
-import Telegram.Bot.FSAfe.TaggedContext (TaggedContext (EmptyTaggedContext))
-import Telegram.Bot.FSAfe.DSL (IsMessage, ProperMessage, Message, Proper')
 
 type IsState :: k -> (Type -> Type) -> Constraint
 class IsState a m | a -> m where
   data StateData a :: Type
   parseTransition :: StateData a -> BotContext -> Maybe (SomeTransitionFrom m a)
-  type StateMessage a :: Message
+  type StateMessage a :: MessageKind
   extractMessageContext :: StateData a -> m (MessageContext (Proper' (StateMessage a)))
   -- TODO make this default more generic via creating help typeclass,
   -- there should be 2 default cases: empty and when fields of StateData are sufficient
@@ -30,7 +32,7 @@ class IsState a m | a -> m where
                                 => StateData a -> m (MessageContext (Proper' (StateMessage a)))
   extractMessageContext _ = pure $ MessageContext EmptyTaggedContext
 
-type MessageContext :: ProperMessage -> Type
+type MessageContext :: ProperMessageKind -> Type
 data MessageContext a where
   MessageContext :: IsMessage a ctx => TaggedContext ctx -> MessageContext a
 

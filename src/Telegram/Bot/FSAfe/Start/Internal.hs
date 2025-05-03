@@ -39,9 +39,9 @@ import Control.Concurrent.STM
 import Data.Either (partitionEithers)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Control.Concurrent.Async (Async(asyncThreadId), async, link)
-import Telegram.Bot.FSAfe.DSL (renderMessage)
+import Telegram.Bot.DSL (renderMessage)
 import Data.Proxy (Proxy(..))
-import Telegram.Bot.FSAfe.Reply (reply)
+import Telegram.Bot.FSAfe.Reply (reply, toReplyMessage)
 
 tryAdvanceState :: (forall x. m x -> BotM x) -> SomeStateData m -> BotM (SomeStateData m)
 tryAdvanceState nt (SomeStateData state) = do
@@ -53,7 +53,7 @@ tryAdvanceState nt (SomeStateData state) = do
       nt (extractMessageContext state') >>= \case
         MessageContext a -> do
           let msg = renderMessage (Proxy @(StateMessage to)) a
-          reply msg
+          reply $ toReplyMessage msg
       return $ SomeStateData state'
 
 startBotGeneric

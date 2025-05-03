@@ -3,7 +3,18 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    commit: bb840794b545d66cd9c248afca2f372e16609b28
+    git: https://github.com/danielambda/telegram-bot-message-dsl
+    name: telegram-bot-message-dsl
+    pantry-tree:
+      sha256: 0885506cabc10983142103980935e60dbb9e411976aae2ad488ee534cd404aeb
+      size: 768
+    version: 0.1.0.0
+  original:
+    commit: bb840794b545d66cd9c248afca2f372e16609b28
+    git: https://github.com/danielambda/telegram-bot-message-dsl
 snapshots:
 - completed:
     sha256: 1964d439d2a152be4238053f3f997a09fb348391984daab86d724975ef9a423f

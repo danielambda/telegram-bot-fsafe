@@ -25,7 +25,7 @@ import Control.Monad ((<=<))
 import Control.Monad.Reader (ReaderT(..), asks)
 import Data.Char (isSpace)
 import Telegram.Bot.FSAfe.BotM (BotContext (..))
-import Telegram.Bot.FSAfe.DSL (IsCallbackData (fromCallbackData))
+import Telegram.Bot.DSL (IsCallbackData (fromCallbackData))
 
 type BotContextParser a = ReaderT BotContext Maybe a
 

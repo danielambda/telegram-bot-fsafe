@@ -13,6 +13,8 @@ library:
   - Telegram.Bot.FSAfe.Start.Internal
 
   dependencies:
+  - telegram-bot-message-dsl
+
   - base
   - telegram-bot-api
   - tagged
