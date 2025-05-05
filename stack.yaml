@@ -11,4 +11,4 @@ packages:
 
 extra-deps:
   - git: https://github.com/danielambda/telegram-bot-message-dsl
-    commit: bb840794b545d66cd9c248afca2f372e16609b28
+    commit: 3184e6b8b285d3d99edb4108d1cd16753f379d0e

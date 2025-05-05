@@ -52,5 +52,6 @@ executable telegram-bot-fsafe-example
     , mtl
     , telegram-bot-api
     , telegram-bot-fsafe
+    , telegram-bot-message-dsl
     , text
   default-language: Haskell2010

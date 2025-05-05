@@ -27,13 +27,6 @@ import Telegram.Bot.DSL.Message (Message(..), textMessage)
 import Telegram.Bot.FSAfe.RunTG (runTG)
 import Telegram.Bot.FSAfe.BotM (BotContext(..), MonadBot (..))
 
-asCallbackButton :: Show a => Text -> a -> InlineKeyboardButton
-asCallbackButton label a = callbackButton label (T.pack $ show a)
-
-callbackButton :: Text -> Text -> InlineKeyboardButton
-callbackButton label callback = (labeledInlineKeyboardButton label)
-  {inlineKeyboardButtonCallbackData = Just callback}
-
 currentChatId :: MonadBot m => m (Maybe ChatId)
 currentChatId = liftBot $ asks $ updateChatId . botContextUpdate
 

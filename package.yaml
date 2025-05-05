@@ -33,6 +33,7 @@ executables:
     source-dirs: example
     dependencies:
     - telegram-bot-fsafe
+    - telegram-bot-message-dsl
     - telegram-bot-api
 
     - base

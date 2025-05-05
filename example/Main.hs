@@ -17,14 +17,19 @@ module Main where
 
 import Telegram.Bot.FSAfe.Start (getEnvToken, hoistStartKeyedBot_)
 import Telegram.Bot.FSAfe.BotContextParser (callbackQueryDataRead, command, runBotContextParser)
-import Telegram.Bot.FSAfe.FSA (IsState(..), IsTransition(..), SomeTransitionFrom(..))
-import Telegram.Bot.FSAfe.Reply (asCallbackButton)
+import Telegram.Bot.FSAfe.FSA (MessageContext(..), IsState(..), IsTransition(..), SomeTransitionFrom(..))
 
 import Telegram.Bot.API as Tg (updateChatId)
 import Control.Monad.Reader (Reader, runReader, MonadReader (..), asks)
 import Control.Applicative ((<|>))
 import qualified Data.Text as T
-import Telegram.Bot.FSAfe (CallbackButtons, HasTaggedContext(..), UnitCallbackBtn, IsUnit(..), ReadShow(..), IsCallbackData, andLet, let', TextEntity(..), (:|:), CallbackBtn, AsMessage, (:\), TaggedContext(..), Tagged(..), MessageContext(..))
+import Telegram.Bot.DSL
+  ( CallbackButtons, HasTaggedContext(..), UnitCallbackBtn, IsUnit(..), ReadShow(..)
+  , IsCallbackData, andLet, let', VarShow, Var, F
+  , (:|:), (:\), CallbackBtn, AsMessage
+  , TaggedContext(..), Tagged(..)
+  , callbackButton
+  )
 import GHC.Generics (Generic)
 
 tshow :: Show a => a -> T.Text
@@ -119,8 +124,8 @@ instance IsState 'SelectingToppings AppM where
     return $ MessageContext
       $ andLet @"selectTopping" (f, availableToppings)
     where f s = if s `elem` toppings
-            then asCallbackButton ("✓" <> tshow s) (RemoveTopping s)
-            else asCallbackButton (tshow s) (AddTopping s)
+            then callbackButton ("✓" <> tshow s) (RemoveTopping s)
+            else callbackButton (tshow s) (AddTopping s)
   parseTransition SelectingToppingsD{} = runBotContextParser
     $   SomeTransition <$> callbackQueryDataRead @AddTopping
     <|> SomeTransition <$> callbackQueryDataRead @RemoveTopping
@@ -131,8 +136,7 @@ instance IsState 'ConfirmingOrder AppM where
   newtype StateData 'ConfirmingOrder = ConfirmingOrderD PizzaOrder
 
   type StateMessage 'ConfirmingOrder
-    =  Var "pizza"
-    :\ CallbackBtn (VarShow "size") PizzaOrder "order"
+    =  VarShow "pizza"
     :\ UnitCallbackBtn "Confirm" Confirm
 
   parseTransition ConfirmingOrderD{} = runBotContextParser
@@ -140,8 +144,7 @@ instance IsState 'ConfirmingOrder AppM where
     <|> SomeTransition Confirm <$ command "confirm"
 
   extractMessageContext (ConfirmingOrderD pizza) = return $ MessageContext
-    $ let'   @"order" PizzaOrder{size = Medium, toppings=[]}
-    $ andLet @"pizza" (tshow pizza)
+    $ andLet @"pizza" pizza
 
 data Confirm = Confirm
   deriving (Show, Read)
