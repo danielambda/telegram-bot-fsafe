@@ -5,15 +5,15 @@
 
 packages:
 - completed:
-    commit: 3184e6b8b285d3d99edb4108d1cd16753f379d0e
+    commit: e3416f4b973fff4ea5d9ce860c74ea57b9f412ad
     git: https://github.com/danielambda/telegram-bot-message-dsl
     name: telegram-bot-message-dsl
     pantry-tree:
-      sha256: 3ded1847a482cd6086c4a26b9434d8c0ec4fd1453f2fc9f9734fbcf45c89e1f0
-      size: 1855
+      sha256: 13956972b643f2930707857fef460ee2ff9a7b4aa8c3c6140446f5bf1c75361a
+      size: 1856
     version: 0.1.0.0
   original:
-    commit: 3184e6b8b285d3d99edb4108d1cd16753f379d0e
+    commit: e3416f4b973fff4ea5d9ce860c74ea57b9f412ad
     git: https://github.com/danielambda/telegram-bot-message-dsl
 snapshots:
 - completed:

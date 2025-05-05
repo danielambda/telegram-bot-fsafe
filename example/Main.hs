@@ -25,10 +25,10 @@ import Control.Applicative ((<|>))
 import qualified Data.Text as T
 import Telegram.Bot.DSL
   ( CallbackButtons, HasTaggedContext(..), UnitCallbackBtn, IsUnit(..), ReadShow(..)
-  , IsCallbackData, andLet, let', VarShow, Var, F
-  , (:|:), (:\), CallbackBtn, AsMessage
+  , IsCallbackData, andLet, let', VarShow, F
+  , (:|:), (:\), AsMessage
   , TaggedContext(..), Tagged(..)
-  , callbackButton
+  , callbackButton, Buttons
   )
 import GHC.Generics (Generic)
 
@@ -69,7 +69,7 @@ data State
   | ConfirmingOrder
 
 instance IsState 'InitialState AppM where
-  data StateData 'InitialState = InitialStateD
+  data StateData 'InitialState = InitialStateD deriving Generic
   type StateMessage 'InitialState = AsMessage "Try /start"
   parseTransition InitialStateD = runBotContextParser
     $ SomeTransition StartSelectingSize <$ command "start"
@@ -92,7 +92,8 @@ instance IsState 'SelectingSize AppM where
   newtype StateData 'SelectingSize = SelectingSizeD PizzaSize
 
   type StateMessage 'SelectingSize
-    =  "You selected " :|: Var "selectedSize" :|: " size"
+    =  F"You selected {show selectedSize} size"
+    :\  "You selected" :|: VarShow "selectedSize" :|: "size"
     :\ CallbackButtons (VarShow "size") SelectSize "pizzaSizes"
     :\ UnitCallbackBtn "Confirm" Confirm
 
@@ -104,7 +105,7 @@ instance IsState 'SelectingSize AppM where
   extractMessageContext (SelectingSizeD selectedSize) = do
     availableSizes <- asks availableSizes
     return $ MessageContext
-      $ let'   @"selectedSize" (tshow selectedSize)
+      $ let'   @"selectedSize" selectedSize
       $ andLet @"pizzaSizes" (SelectSize <$> filter (/= selectedSize) availableSizes)
 
 instance IsState 'SelectingToppings AppM where
@@ -116,13 +117,13 @@ instance IsState 'SelectingToppings AppM where
 
   type StateMessage 'SelectingToppings
     =  "Please, select toppings for your pizza:"
-    -- :\ CallbackButtons Topping "selectTopping" -- TODO  ?
+    :\ Buttons "toppingButtons"
     :\ UnitCallbackBtn "Confirm" Confirm
 
   extractMessageContext SelectingToppingsD{toppings} = do
     availableToppings <- asks availableToppings
     return $ MessageContext
-      $ andLet @"selectTopping" (f, availableToppings)
+      $ andLet @"toppingButtons" (f <$> availableToppings)
     where f s = if s `elem` toppings
             then callbackButton ("✓" <> tshow s) (RemoveTopping s)
             else callbackButton (tshow s) (AddTopping s)
@@ -133,7 +134,9 @@ instance IsState 'SelectingToppings AppM where
     <|> SomeTransition Confirm <$ command "confirm"
 
 instance IsState 'ConfirmingOrder AppM where
-  newtype StateData 'ConfirmingOrder = ConfirmingOrderD PizzaOrder
+  newtype StateData 'ConfirmingOrder = ConfirmingOrderD
+    { pizza :: PizzaOrder }
+    deriving Generic
 
   type StateMessage 'ConfirmingOrder
     =  VarShow "pizza"
@@ -142,9 +145,6 @@ instance IsState 'ConfirmingOrder AppM where
   parseTransition ConfirmingOrderD{} = runBotContextParser
     $   SomeTransition <$> callbackQueryDataRead @Confirm
     <|> SomeTransition Confirm <$ command "confirm"
-
-  extractMessageContext (ConfirmingOrderD pizza) = return $ MessageContext
-    $ andLet @"pizza" pizza
 
 data Confirm = Confirm
   deriving (Show, Read)
