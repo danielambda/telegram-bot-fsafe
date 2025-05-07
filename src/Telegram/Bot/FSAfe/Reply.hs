@@ -13,7 +13,6 @@
 module Telegram.Bot.FSAfe.Reply where
 
 import Data.Text (Text)
-import Data.Text as T (pack)
 import Telegram.Bot.API hiding (Message, editMessageText, editMessageReplyMarkup)
 
 import Control.Applicative ((<|>))

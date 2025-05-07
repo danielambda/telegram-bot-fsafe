@@ -57,7 +57,7 @@ tryAdvanceState nt (SomeStateData state) = do
       return $ SomeStateData state'
 
 startBotGeneric
-  :: (Tg.User -> state -> Tg.Update -> ClientM state)
+  :: (Tg.User -> state -> Tg.Update -> ClientM (Maybe state))
   -> state
   -> Tg.Token
   -> IO (Either ClientError ())
@@ -81,7 +81,7 @@ startBotGeneric mkUpdateState initialState token = do
       runClientM (updateState currentState update) clientEnv >>=
         either
           (putStrLn . ("Error processing update: " ++) . show)
-          (atomically . writeTVar stateTVar)
+          (maybe (pure ()) (atomically . writeTVar stateTVar))
 
     asyncLink action = do
       a <- async action

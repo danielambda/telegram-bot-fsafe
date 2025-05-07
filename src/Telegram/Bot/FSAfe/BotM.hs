@@ -19,17 +19,24 @@ import qualified Telegram.Bot.API as Tg (User, Update)
 import Control.Monad.Reader (ReaderT (..), MonadReader, MonadTrans (lift))
 import Servant.Client (ClientM)
 import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Except (ExceptT, runExceptT, MonadError (throwError))
 
-newtype BotM a = BotM (ReaderT BotContext ClientM a)
-  deriving (Functor, Applicative, Monad, MonadReader BotContext, MonadIO)
+-- I know i could've imported MaybeT
+newtype BotM a = BotM (ReaderT BotContext (ExceptT () ClientM) a)
+  deriving (Functor, Applicative, Monad, MonadReader BotContext, MonadError (), MonadIO)
+
+instance MonadFail BotM where
+  fail _ = throwError ()
 
 data BotContext = BotContext
   { botContextUser   :: Tg.User
   , botContextUpdate :: Tg.Update
   }
 
-runBotM :: BotM a -> BotContext -> ClientM a
-runBotM (BotM reader) = runReaderT reader
+runBotM :: BotM a -> BotContext -> ClientM (Maybe a)
+runBotM (BotM reader) = fmap f . runExceptT . runReaderT reader
+  where f (Left ()) = Nothing
+        f (Right a) = Just a
 
 class MonadIO m => MonadBot m where
   liftBot :: BotM a -> m a
@@ -38,5 +45,5 @@ instance MonadBot BotM where
   liftBot = id
 
 liftClientM :: MonadBot m => ClientM a -> m a
-liftClientM = liftBot . BotM . lift
+liftClientM = liftBot . BotM . lift . lift
 

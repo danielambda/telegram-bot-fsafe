@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Telegram.Bot.FSAfe.Start
   ( getEnvToken
@@ -85,6 +86,7 @@ hoistStartKeyedBot nt toKey initialState = startBotGeneric updateStateMap HM.emp
     let key = toKey update
     let defState = SomeStateData initialState
     let state = stateMap & HM.lookupDefault defState key
-    nextState <- runBotM (tryAdvanceState nt state) (BotContext botUser update)
-    return $ stateMap & HM.insert key nextState
+    runBotM (tryAdvanceState nt state) (BotContext botUser update) >>= \case
+      Just nextState -> return $ Just $ stateMap & HM.insert key nextState
+      Nothing -> return $ Just stateMap
 
