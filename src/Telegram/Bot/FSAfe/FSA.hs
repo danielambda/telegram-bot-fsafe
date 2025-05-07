@@ -11,7 +11,7 @@ module Telegram.Bot.FSAfe.FSA
 
 import Data.Kind (Type, Constraint)
 
-import Telegram.Bot.DSL (IsMessage, ProperMessageKind, MessageKind, Proper', HasTaggedContext (..))
+import Telegram.Bot.DSL (IsMessage, MessageKind, Proper', HasTaggedContext (..), type (++))
 import Telegram.Bot.DSL.TaggedContext  (TaggedContext (..))
 
 import Telegram.Bot.FSAfe.BotM (BotContext)
@@ -21,17 +21,22 @@ class IsState a m | a -> m where
   data StateData a :: Type
   parseTransition :: StateData a -> BotContext -> Maybe (SomeTransitionFrom m a)
   type StateMessage a :: MessageKind
-  extractMessageContext :: StateData a -> m (MessageContext (Proper' (StateMessage a)))
+  extractMessageContext :: StateData a -> m (MessageContext a)
   default extractMessageContext ::
     ( Applicative m
     , IsMessage (Proper' (StateMessage a)) ctx
     , HasTaggedContext ctx (StateData a)
-    ) => StateData a -> m (MessageContext (Proper' (StateMessage a)))
-  extractMessageContext = pure . MessageContext . getTaggedContext
+    ) => StateData a -> m (MessageContext a)
+  extractMessageContext _ = pure $ MessageContext EmptyTaggedContext
 
-type MessageContext :: ProperMessageKind -> Type
+type MessageContext :: k -> Type
 data MessageContext a where
-  MessageContext :: IsMessage a ctx => TaggedContext ctx -> MessageContext a
+  MessageContext
+    :: ( IsMessage (Proper' (StateMessage a)) ctx
+       , HasTaggedContext ctx0 (StateData a)
+       , ctx ~ ctx1 ++ ctx0
+       )
+    => TaggedContext ctx1 -> MessageContext a
 
 type SomeStateData :: (Type -> Type) -> Type
 data SomeStateData m where

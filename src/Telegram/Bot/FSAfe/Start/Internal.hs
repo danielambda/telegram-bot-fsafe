@@ -38,7 +38,7 @@ import Control.Concurrent.STM
 import Data.Either (partitionEithers)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Control.Concurrent.Async (Async(asyncThreadId), async, link)
-import Telegram.Bot.DSL (renderMessage)
+import Telegram.Bot.DSL (renderMessage, HasTaggedContext (getTaggedContext), (.++))
 import Data.Proxy (Proxy(..))
 import Telegram.Bot.FSAfe.Reply (reply, toReplyMessage)
 
@@ -50,8 +50,10 @@ tryAdvanceState nt (SomeStateData state) = do
     Just (SomeTransition transition) -> do
       (state' :: StateData to) <- nt $ handleTransition transition state
       nt (extractMessageContext state') >>= \case
-        MessageContext a -> do
-          let msg = renderMessage (Proxy @(StateMessage to)) a
+        MessageContext extractedCtx -> do
+          let stateCtx = getTaggedContext state'
+          let ctx = extractedCtx .++ stateCtx
+          let msg = renderMessage (Proxy @(StateMessage to)) ctx
           reply $ toReplyMessage msg
       return $ SomeStateData state'
 

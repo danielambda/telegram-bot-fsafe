@@ -25,7 +25,7 @@ import Control.Applicative ((<|>))
 import qualified Data.Text as T
 import Telegram.Bot.DSL
   ( CallbackButtons, HasTaggedContext(..), UnitCallbackBtn, IsUnit(..), ReadShow(..)
-  , IsCallbackData, andLet, let', VarShow, F
+  , IsCallbackData, andLet, VarShow, F
   , (:|:), (:\), AsMessage
   , TaggedContext(..), Tagged(..)
   , callbackButton, Buttons
@@ -75,25 +75,29 @@ instance IsState 'InitialState AppM where
     $ SomeTransition StartSelectingSize <$ command "start"
 
 instance IsState 'SelectingSize0 AppM where
-  data StateData 'SelectingSize0 = SelectingSize0D
+  data StateData 'SelectingSize0 = SelectingSize0D deriving Generic
 
   type StateMessage 'SelectingSize0
     =  "Please, select size of your pizza:"
     :\ CallbackButtons (VarShow "size") SelectSize "pizzaSizes"
 
-  parseTransition SelectingSize0D = runBotContextParser
+  parseTransition _ = runBotContextParser
     $ SomeTransition <$> callbackQueryDataRead @SelectSize
 
-  extractMessageContext SelectingSize0D = do
+  extractMessageContext _ = do
     availableSizes <- asks availableSizes
-    return $ MessageContext $ Tagged @"pizzaSizes" (SelectSize <$> availableSizes) :. EmptyTaggedContext
+    return $ MessageContext
+      $  Tagged @"pizzaSizes" (SelectSize <$> availableSizes)
+      :. EmptyTaggedContext
 
 instance IsState 'SelectingSize AppM where
-  newtype StateData 'SelectingSize = SelectingSizeD PizzaSize
+  newtype StateData 'SelectingSize = SelectingSizeD
+    { selectedSize :: PizzaSize }
+    deriving Generic
 
   type StateMessage 'SelectingSize
     =  F"You selected {show selectedSize} size"
-    :\  "You selected" :|: VarShow "selectedSize" :|: "size"
+    :\  "You selected " :|: VarShow "selectedSize" :|: " size"
     :\ CallbackButtons (VarShow "size") SelectSize "pizzaSizes"
     :\ UnitCallbackBtn "Confirm" Confirm
 
@@ -105,7 +109,6 @@ instance IsState 'SelectingSize AppM where
   extractMessageContext (SelectingSizeD selectedSize) = do
     availableSizes <- asks availableSizes
     return $ MessageContext
-      $ let'   @"selectedSize" selectedSize
       $ andLet @"pizzaSizes" (SelectSize <$> filter (/= selectedSize) availableSizes)
 
 instance IsState 'SelectingToppings AppM where
@@ -113,7 +116,7 @@ instance IsState 'SelectingToppings AppM where
     = SelectingToppingsD
     { size :: PizzaSize
     , toppings :: [Topping]
-    }
+    } deriving Generic
 
   type StateMessage 'SelectingToppings
     =  "Please, select toppings for your pizza:"
