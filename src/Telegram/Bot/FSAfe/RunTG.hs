@@ -7,7 +7,6 @@
   All rights reserved.
 -}
 
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
 
 module Telegram.Bot.FSAfe.RunTG where

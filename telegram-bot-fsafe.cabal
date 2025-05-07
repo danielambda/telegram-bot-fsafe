@@ -24,6 +24,20 @@ library
       Paths_telegram_bot_fsafe
   hs-source-dirs:
       src
+  default-extensions:
+      ConstraintKinds
+      DataKinds
+      DefaultSignatures
+      DerivingStrategies
+      DerivingVia
+      FunctionalDependencies
+      GADTs
+      NoStarIsType
+      PolyKinds
+      StandaloneKindSignatures
+      TypeApplications
+      TypeFamilies
+      TypeOperators
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       aeson
@@ -38,7 +52,7 @@ library
     , telegram-bot-message-dsl
     , text
     , unordered-containers
-  default-language: Haskell2010
+  default-language: GHC2021
 
 executable telegram-bot-fsafe-example
   main-is: Main.hs

@@ -27,6 +27,23 @@ library:
   - unordered-containers
   - hashable
 
+  language: GHC2021
+
+  default-extensions:
+  - ConstraintKinds
+  - DataKinds
+  - DefaultSignatures
+  - DerivingStrategies
+  - DerivingVia
+  - FunctionalDependencies
+  - GADTs
+  - NoStarIsType
+  - PolyKinds
+  - StandaloneKindSignatures
+  - TypeApplications
+  - TypeFamilies
+  - TypeOperators
+
 executables:
   telegram-bot-fsafe-example:
     main: Main.hs
