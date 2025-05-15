@@ -13,16 +13,16 @@ import Telegram.Bot.DSL.TaggedContext  (TaggedContext (..))
 import Telegram.Bot.FSAfe.BotM (BotContext)
 import Data.Proxy (Proxy (..))
 
-type Transition :: Type -> Type -> Type -> Type
-data Transition a t b
+type Transition :: Type -> Type -> Type
+data Transition a t
 
 infixl 5 :>-
-type (:>-) :: Type -> Type -> Type -> Type
+type (:>-) :: Type -> Type -> Type
 type a :>- t = Transition a t
 
 infixl 5 :->
-type (:->) :: (Type -> Type) -> Type -> Type
-type at :-> b = at b
+type (:->) :: Type -> Type -> Type
+type at :-> b = at
 
 type SomeStateFrom :: [Type] -> (Type -> Type) -> Type
 data SomeStateFrom fsa m where
@@ -37,10 +37,10 @@ instance Aboba fsa state (TransitionsOfState state fsa) m => HasState state fsa 
 
 type family TransitionsOfState a fsa where
   TransitionsOfState _ '[] = '[]
-  TransitionsOfState a (Transition a t b ': fsa) = '(t, b) ': TransitionsOfState a fsa
+  TransitionsOfState a (Transition a t ': fsa) = t ': TransitionsOfState a fsa
   TransitionsOfState a (_ ': fsa) = TransitionsOfState a fsa
 
-type Aboba :: [Type] -> Type -> [(Type, Type)] -> (Type -> Type) -> Constraint
+type Aboba :: [Type] -> Type -> [Type] -> (Type -> Type) -> Constraint
 class Aboba fsa state transitions m | fsa -> m where
   handleAboba :: Proxy transitions -> BotContext -> state -> m (SomeStateFrom fsa m)
 
@@ -49,7 +49,7 @@ instance (Applicative m, HasState state fsa m, IsState state m)
   handleAboba _ _ state = pure $ SomeStateFrom state
 
 instance (Functor m, Aboba fsa state ts m, IsTransition t state b m, HasState b fsa m)
-      => Aboba fsa state ('(t, b) ': ts) m where
+      => Aboba fsa state (t ': ts) m where
   handleAboba _ botCtx state =
     case parseTransition @t state botCtx of
       Nothing -> handleAboba (Proxy @ts) botCtx state
