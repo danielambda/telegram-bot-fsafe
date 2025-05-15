@@ -2,15 +2,8 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
 
-module Telegram.Bot.FSAfe.FSA
-  ( IsState(..),      SomeStateData(..)
-  , IsTransition(..), SomeTransitionFrom(..)
-  , MessageContext(..)
-  , HasState(..), StateTransitions(..)
-  , FSA(..), FSAMonad
-  ) where
+module Telegram.Bot.FSAfe.FSA where
 
 import Data.Kind (Type, Constraint)
 
@@ -18,41 +11,56 @@ import Telegram.Bot.DSL (IsMessage, MessageKind, Proper', HasTaggedContext (..),
 import Telegram.Bot.DSL.TaggedContext  (TaggedContext (..))
 
 import Telegram.Bot.FSAfe.BotM (BotContext)
-import Control.Applicative ((<|>))
+import Data.Proxy (Proxy (..))
 
-infix 4 :@
-data FSA = [StateTransitions] :@ (Type -> Type)
-infix 4 :~
-data StateTransitions = Type :~ [Type]
+type Transition :: Type -> Type -> Type -> Type
+data Transition a t b
 
-type FSAMonad :: FSA -> (Type -> Type)
-type family FSAMonad fsa where
-  FSAMonad (_ :@ m) = m
+infixl 5 :>-
+type (:>-) :: Type -> Type -> Type -> Type
+type a :>- t = Transition a t
 
-type HasState :: FSA -> Type -> Constraint
-class HasState fsa state where
-  parseTransitions :: state -> BotContext -> Maybe (SomeTransitionFrom state (FSAMonad fsa))
+infixl 5 :->
+type (:->) :: (Type -> Type) -> Type -> Type
+type at :-> b = at b
 
-instance {-# OVERLAPPABLE #-}
-         HasState ((state :~ '[]) ': ts :@ m) state where
-  parseTransitions _ _ = Nothing
+type SomeStateFrom :: [Type] -> (Type -> Type) -> Type
+data SomeStateFrom fsa m where
+  SomeStateFrom :: (IsState state m, HasState state fsa m) => state -> SomeStateFrom fsa m
 
-instance {-# OVERLAPPABLE #-}
-         HasState (fsa :@ m) state
-      => HasState (ts ': fsa :@ m) state where
-  parseTransitions = parseTransitions @(fsa :@ m)
+type HasState :: Type -> [Type] -> (Type -> Type) -> Constraint
+class HasState state fsa m | fsa -> m where
+  handleState :: BotContext -> state -> m (SomeStateFrom fsa m)
 
-instance {-# OVERLAPPING #-}
-         ( IsTransition t state to m
-         , HasState ((state :~ ts) ': ts' :@ m) state
-         )
-      => HasState ((state :~ (t ': ts)) ': ts' :@ m) state where
-  parseTransitions state botCtx
-    =   SomeTransition <$> parseTransition @t @state @to @m state botCtx
-    <|> parseTransitions @((state :~ ts) ': ts' :@ m) state botCtx
+instance Aboba fsa state (TransitionsOfState state fsa) m => HasState state fsa m where
+  handleState = handleAboba (Proxy @(TransitionsOfState state fsa))
 
-type IsState :: Type -> Constraint
-class IsState s where
+type family TransitionsOfState a fsa where
+  TransitionsOfState _ '[] = '[]
+  TransitionsOfState a (Transition a t b ': fsa) = '(t, b) ': TransitionsOfState a fsa
+  TransitionsOfState a (_ ': fsa) = TransitionsOfState a fsa
+
+type Aboba :: [Type] -> Type -> [(Type, Type)] -> (Type -> Type) -> Constraint
+class Aboba fsa state transitions m | fsa -> m where
+  handleAboba :: Proxy transitions -> BotContext -> state -> m (SomeStateFrom fsa m)
+
+instance (Applicative m, HasState state fsa m, IsState state m)
+      => Aboba fsa state '[] m where
+  handleAboba _ _ state = pure $ SomeStateFrom state
+
+instance (Functor m, Aboba fsa state ts m, IsTransition t state b m, HasState b fsa m)
+      => Aboba fsa state ('(t, b) ': ts) m where
+  handleAboba _ botCtx state =
+    case parseTransition @t state botCtx of
+      Nothing -> handleAboba (Proxy @ts) botCtx state
+      Just t -> SomeStateFrom <$> handleTransition state t
+
+class IsState to m => IsTransition t from to m | t from -> to, t from -> m where
+  parseTransition :: from -> BotContext -> Maybe t
+  handleTransition :: from -> t -> m to
+
+type IsState :: Type -> (Type -> Type) -> Constraint
+class IsState s m | s -> m where
   type StateMessage s :: MessageKind
   extractMessageContext :: s -> m (MessageContext s) -- TODO make extracting from monad
   -- some typeclass using instance, then this method maybe will be removed
@@ -71,16 +79,3 @@ data MessageContext a where
        , ctx ~ ctx1 ++ ctx0
        )
     => TaggedContext ctx1 -> MessageContext a
-
-type SomeStateData :: FSA -> Type
-data SomeStateData fsa where
-  SomeStateData :: (IsState s, HasState fsa s) => s -> SomeStateData fsa
-
-type IsTransition :: Type -> Type -> Type -> (Type -> Type) -> Constraint
-class (IsState from, IsState to) => IsTransition t from to m | from t -> to where
-  parseTransition :: from -> BotContext -> Maybe t
-  handleTransition :: t -> from -> m to
-
-type SomeTransitionFrom :: Type -> (Type -> Type) -> Type
-data SomeTransitionFrom from m where
-  SomeTransition :: IsTransition t from to m => t -> SomeTransitionFrom from m

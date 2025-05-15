@@ -4,7 +4,7 @@
 
 module Telegram.Bot.FSAfe.Start
   ( getEnvToken
-  -- , hoistStartBot, hoistStartBot_
+  , hoistStartBot --, hoistStartBot_
   -- ,      startBot,      startBot_
   -- , hoistStartKeyedBot, hoistStartKeyedBot_
   -- ,      startKeyedBot,      startKeyedBot_
@@ -17,12 +17,13 @@ import qualified Telegram.Bot.API as Tg
 import Servant.Client (ClientError)
 
 import Telegram.Bot.FSAfe.BotM (BotContext(..), runBotM, BotM)
-import Telegram.Bot.FSAfe.FSA (SomeStateData(..), IsState(..))
+import Telegram.Bot.FSAfe.FSA (IsState(..), SomeStateFrom (..), HasState)
 import Control.Monad (void)
 import Data.Function ((&))
 import Data.String (fromString)
 import System.Environment (getEnv)
 import Telegram.Bot.FSAfe.Start.Internal (tryAdvanceState, startBotGeneric)
+import Data.Proxy (Proxy)
 
 getEnvToken :: String -> IO Tg.Token
 getEnvToken = fmap fromString . getEnv
@@ -37,14 +38,14 @@ getEnvToken = fmap fromString . getEnv
 --   :: forall a m. IsState a m
 --   => (forall x. m x -> BotM x) -> a -> Tg.Token -> IO ()
 -- hoistStartBot_ nt state token = void $ hoistStartBot nt state token
---
--- hoistStartBot
---   :: forall a m. IsState a m
---   => (forall x. m x -> BotM x) -> a -> Tg.Token -> IO (Either ClientError ())
--- hoistStartBot nt = startBotGeneric updateState . SomeStateData
---   where
---   updateState botUser state update =
---     runBotM (tryAdvanceState nt state) (BotContext botUser update)
+
+hoistStartBot
+  :: forall fsa a m. (IsState a m, HasState a fsa m)
+  => Proxy fsa -> (forall x. m x -> BotM x) -> a -> Tg.Token -> IO (Either ClientError ())
+hoistStartBot fsa nt = startBotGeneric updateState . SomeStateFrom
+  where
+  updateState botUser state update =
+    runBotM (tryAdvanceState fsa nt state) (BotContext botUser update)
 --
 -- startKeyedBot_
 --   :: forall a key. (Hashable key, IsState a BotM)
