@@ -22,7 +22,7 @@ import qualified Telegram.Bot.API as Tg
 import Servant.Client (ClientError, ClientM, runClientM)
 
 import Telegram.Bot.FSAfe.FSA
-  ( parseTransition , IsState (..), MessageContext (..), SomeStateFrom (..), HasState (handleState))
+  (IsState (..), MessageContext (..), SomeStateFrom (..), HasState (..))
 import Telegram.Bot.FSAfe.BotM (BotM)
 import Control.Monad.Error.Class (catchError)
 import Control.Monad.IO.Class (liftIO)

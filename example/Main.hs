@@ -34,8 +34,8 @@ import Telegram.Bot.DSL
 import GHC.Generics (Generic)
 
 type FSA =
- '[ A :>- T0 :-> B
-  , B :>- T1 :-> B
+ '[ A :>- T0
+  , B :>- T1
   ]
 
 data A = A deriving Generic

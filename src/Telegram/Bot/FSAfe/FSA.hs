@@ -1,5 +1,5 @@
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -19,10 +19,6 @@ data Transition a t
 infixl 5 :>-
 type (:>-) :: Type -> Type -> Type
 type a :>- t = Transition a t
-
-infixl 5 :->
-type (:->) :: Type -> Type -> Type
-type at :-> b = at
 
 type SomeStateFrom :: [Type] -> (Type -> Type) -> Type
 data SomeStateFrom fsa m where
