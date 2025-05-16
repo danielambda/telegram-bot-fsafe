@@ -11,6 +11,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Telegram.Bot.FSAfe.Start.Internal
   ( tryAdvanceState
@@ -22,8 +23,8 @@ import qualified Telegram.Bot.API as Tg
 import Servant.Client (ClientError, ClientM, runClientM)
 
 import Telegram.Bot.FSAfe.FSA
-  ( SomeTransitionFrom(..), SomeStateData(..), IsTransition(..)
-  , IsState (..), MessageContext (..), parseSomeTransitionFromState
+  ( SomeTransitionFrom(..), SomeStateData(..)
+  , IsState (..), MessageContext (..), parseSomeTransition, HList, Transition (..)
   )
 import Telegram.Bot.FSAfe.BotM (BotM)
 import Control.Monad.Error.Class (catchError)
@@ -43,11 +44,11 @@ import Data.Proxy (Proxy(..))
 import Telegram.Bot.FSAfe.Reply (reply, toReplyMessage)
 
 tryAdvanceState :: (forall x. m x -> BotM x) -> SomeStateData m -> BotM (SomeStateData m)
-tryAdvanceState nt (SomeStateData state) = do
+tryAdvanceState nt (SomeStateData ts state) = do
   botCtx <- ask
-  case parseSomeTransitionFromState state botCtx of
-    Nothing -> pure $ SomeStateData state
-    Just (SomeTransition transition) -> do
+  case parseSomeTransition ts state botCtx of
+    Nothing -> pure $ SomeStateData ts state
+    Just (SomeTransition Transition{..} transition) -> do
       (state' :: to) <- nt $ handleTransition transition state
       nt (extractMessageContext state') >>= \case
         MessageContext extractedCtx -> do
@@ -55,7 +56,7 @@ tryAdvanceState nt (SomeStateData state) = do
           let ctx = extractedCtx .++ stateCtx
           let msg = renderMessage (Proxy @(StateMessage to)) ctx
           reply $ toReplyMessage msg
-      return $ SomeStateData state'
+      return $ SomeStateData ts state'
 
 startBotGeneric
   :: (Tg.User -> state -> Tg.Update -> ClientM (Maybe state))
