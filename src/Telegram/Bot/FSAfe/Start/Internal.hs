@@ -22,8 +22,8 @@ import qualified Telegram.Bot.API as Tg
 import Servant.Client (ClientError, ClientM, runClientM)
 
 import Telegram.Bot.FSAfe.FSA
-  ( SomeTransitionFrom(..), SomeStateData(..), parseTransition, IsTransition(..)
-  , IsState (..), MessageContext (..)
+  ( SomeTransitionFrom(..), SomeStateData(..), IsTransition(..)
+  , IsState (..), MessageContext (..), parseSomeTransitionFromState
   )
 import Telegram.Bot.FSAfe.BotM (BotM)
 import Control.Monad.Error.Class (catchError)
@@ -45,7 +45,7 @@ import Telegram.Bot.FSAfe.Reply (reply, toReplyMessage)
 tryAdvanceState :: (forall x. m x -> BotM x) -> SomeStateData m -> BotM (SomeStateData m)
 tryAdvanceState nt (SomeStateData state) = do
   botCtx <- ask
-  case parseTransition state botCtx of
+  case parseSomeTransitionFromState state botCtx of
     Nothing -> pure $ SomeStateData state
     Just (SomeTransition transition) -> do
       (state' :: to) <- nt $ handleTransition transition state

@@ -10,6 +10,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -17,7 +18,7 @@ module Main where
 
 import Telegram.Bot.FSAfe.Start (getEnvToken, hoistStartKeyedBot_)
 import Telegram.Bot.FSAfe.BotContextParser (callbackQueryDataRead, command, runBotContextParser)
-import Telegram.Bot.FSAfe.FSA (MessageContext(..), IsState(..), IsTransition(..), SomeTransitionFrom(..))
+import Telegram.Bot.FSAfe.FSA (MessageContext(..), IsState(..), IsTransition(..))
 
 import Telegram.Bot.API as Tg (updateChatId)
 import Control.Monad.Reader (Reader, runReader, MonadReader (..), asks)
@@ -80,16 +81,15 @@ newtype ConfirmingOrder = ConfirmingOrder
 
 instance IsState InitialState AppM where
   type StateMessage InitialState = AsMessage "Try /start"
-  parseTransition InitialState = runBotContextParser
-    $ SomeTransition StartSelectingSize <$ command "start"
+
+  type OutgoingTransitions InitialState = '[StartSelectingSize]
 
 instance IsState SelectingSize0 AppM where
   type StateMessage SelectingSize0
     =  "Please, select size of your pizza:"
     :\ CallbackButtons (VarShow "size") SelectSize "pizzaSizes"
 
-  parseTransition _ = runBotContextParser
-    $ SomeTransition <$> callbackQueryDataRead @SelectSize
+  type OutgoingTransitions SelectingSize0 = '[SelectSize]
 
   extractMessageContext _ = do
     availableSizes <- asks availableSizes
@@ -104,10 +104,7 @@ instance IsState SelectingSize AppM where
     :\ CallbackButtons (VarShow "size") SelectSize "pizzaSizes"
     :\ UnitCallbackBtn "Confirm" Confirm
 
-  parseTransition SelectingSize{} = runBotContextParser
-    $   SomeTransition <$> callbackQueryDataRead @SelectSize
-    <|> SomeTransition <$> callbackQueryDataRead @Confirm
-    <|> SomeTransition Confirm <$ command "confirm"
+  type OutgoingTransitions SelectingSize = '[SelectSize, Confirm]
 
   extractMessageContext (SelectingSize selectedSize) = do
     availableSizes <- asks availableSizes
@@ -120,6 +117,8 @@ instance IsState SelectingToppings AppM where
     :\ Buttons "toppingButtons"
     :\ UnitCallbackBtn "Confirm" Confirm
 
+  type OutgoingTransitions SelectingToppings = '[RemoveTopping, AddTopping, Confirm]
+
   extractMessageContext SelectingToppings{toppings} = do
     availableToppings <- asks availableToppings
     return $ MessageContext
@@ -127,30 +126,18 @@ instance IsState SelectingToppings AppM where
     where f s = if s `elem` toppings
             then callbackButton ("✓" <> tshow s) (RemoveTopping s)
             else callbackButton (tshow s) (AddTopping s)
-  parseTransition SelectingToppings{} = runBotContextParser
-    $   SomeTransition <$> callbackQueryDataRead @AddTopping
-    <|> SomeTransition <$> callbackQueryDataRead @RemoveTopping
-    <|> SomeTransition <$> callbackQueryDataRead @Confirm
-    <|> SomeTransition Confirm <$ command "confirm"
 
 instance IsState ConfirmingOrder AppM where
   type StateMessage ConfirmingOrder
     =  VarShow "pizza"
     :\ UnitCallbackBtn "Confirm" Confirm
 
-  parseTransition ConfirmingOrder{} = runBotContextParser
-    $   SomeTransition <$> callbackQueryDataRead @Confirm
-    <|> SomeTransition Confirm <$ command "confirm"
-
-data Confirm = Confirm
-  deriving (Show, Read)
-  deriving IsCallbackData via ReadShow Confirm
-
-instance IsUnit Confirm where
-  unitValue = Confirm
+  type OutgoingTransitions ConfirmingOrder = '[Confirm]
 
 data StartSelectingSize = StartSelectingSize
 instance IsTransition StartSelectingSize InitialState AppM SelectingSize0 where
+  parseTransition _ = StartSelectingSize <$ command "start"
+
   handleTransition StartSelectingSize InitialState =
     pure SelectingSize0
 
@@ -159,21 +146,25 @@ newtype SelectSize = SelectSize { size :: PizzaSize }
   deriving IsCallbackData via ReadShow SelectSize
 
 instance IsTransition SelectSize SelectingSize0 AppM SelectingSize where
+  parseTransition _ = callbackQueryDataRead @SelectSize
+
   handleTransition (SelectSize size) SelectingSize0{} =
     pure $ SelectingSize size
 
 instance IsTransition SelectSize SelectingSize AppM SelectingSize where
+  parseTransition _ = runBotContextParser
+    $ callbackQueryDataRead @SelectSize
+
   handleTransition (SelectSize size) SelectingSize{} =
     pure $ SelectingSize size
-
-instance IsTransition Confirm SelectingSize AppM SelectingToppings where
-  handleTransition Confirm (SelectingSize size) =
-    pure $ SelectingToppings size []
 
 newtype AddTopping = AddTopping Topping
   deriving (Show, Read)
   deriving IsCallbackData via ReadShow AddTopping
 instance IsTransition AddTopping SelectingToppings AppM SelectingToppings where
+  parseTransition _ = runBotContextParser
+    $ callbackQueryDataRead @AddTopping
+
   handleTransition (AddTopping topping) SelectingToppings{toppings, ..} =
     pure $ SelectingToppings{toppings = topping:toppings, ..}
 
@@ -181,14 +172,37 @@ newtype RemoveTopping = RemoveTopping Topping
   deriving (Show, Read)
   deriving IsCallbackData via ReadShow RemoveTopping
 instance IsTransition RemoveTopping SelectingToppings AppM SelectingToppings where
+  parseTransition _ = runBotContextParser
+    $ callbackQueryDataRead @RemoveTopping
+
   handleTransition (RemoveTopping topping) SelectingToppings{toppings, ..} =
     pure $ SelectingToppings{toppings = filter (/= topping) toppings, ..}
 
+data Confirm = Confirm
+  deriving (Show, Read, Generic, IsUnit)
+  deriving IsCallbackData via ReadShow Confirm
+
+instance IsTransition Confirm SelectingSize AppM SelectingToppings where
+  parseTransition _ = runBotContextParser
+    $ callbackQueryDataRead @Confirm
+    <|> Confirm <$ command "confirm"
+
+  handleTransition Confirm (SelectingSize size) =
+    pure $ SelectingToppings size []
+
 instance IsTransition Confirm SelectingToppings AppM ConfirmingOrder where
+  parseTransition _ = runBotContextParser
+    $ callbackQueryDataRead @Confirm
+    <|> Confirm <$ command "confirm"
+
   handleTransition Confirm SelectingToppings{..} = do
     pure $ ConfirmingOrder PizzaOrder{..}
 
 instance IsTransition Confirm ConfirmingOrder AppM InitialState where
+  parseTransition _ = runBotContextParser
+    $ callbackQueryDataRead @Confirm
+    <|> Confirm <$ command "confirm"
+
   handleTransition Confirm ConfirmingOrder{} = do
     pure InitialState
 
