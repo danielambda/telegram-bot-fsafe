@@ -16,35 +16,34 @@ import Telegram.Bot.DSL.TaggedContext  (TaggedContext (..))
 
 import Telegram.Bot.FSAfe.BotM (BotContext)
 
-type IsState :: k -> (Type -> Type) -> Constraint
+type IsState :: Type -> (Type -> Type) -> Constraint
 class IsState a m | a -> m where
-  data StateData a :: Type
-  parseTransition :: StateData a -> BotContext -> Maybe (SomeTransitionFrom m a)
+  parseTransition :: a -> BotContext -> Maybe (SomeTransitionFrom m a)
   type StateMessage a :: MessageKind
-  extractMessageContext :: StateData a -> m (MessageContext a)
+  extractMessageContext :: a -> m (MessageContext a)
   default extractMessageContext ::
     ( Applicative m
     , IsMessage (Proper' (StateMessage a)) ctx
-    , HasTaggedContext ctx (StateData a)
-    ) => StateData a -> m (MessageContext a)
+    , HasTaggedContext ctx a
+    ) => a -> m (MessageContext a)
   extractMessageContext _ = pure $ MessageContext EmptyTaggedContext
 
 type MessageContext :: k -> Type
 data MessageContext a where
   MessageContext
     :: ( IsMessage (Proper' (StateMessage a)) ctx
-       , HasTaggedContext ctx0 (StateData a)
+       , HasTaggedContext ctx0 a
        , ctx ~ ctx1 ++ ctx0
        )
     => TaggedContext ctx1 -> MessageContext a
 
 type SomeStateData :: (Type -> Type) -> Type
 data SomeStateData m where
-  SomeStateData :: IsState a m => StateData a -> SomeStateData m
+  SomeStateData :: IsState a m => a -> SomeStateData m
 
-type IsTransition :: Type -> k -> (Type -> Type) -> k -> Constraint
+type IsTransition :: Type -> Type -> (Type -> Type) -> Type -> Constraint
 class (IsState from m, IsState to m) => IsTransition t from m to | from t -> m, from t -> to where
-  handleTransition :: t -> StateData from -> m (StateData to)
+  handleTransition :: t -> from -> m to
 
 type SomeTransitionFrom :: (Type -> Type) -> k -> Type
 data SomeTransitionFrom m from where

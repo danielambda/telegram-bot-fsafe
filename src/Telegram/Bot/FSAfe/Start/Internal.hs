@@ -48,7 +48,7 @@ tryAdvanceState nt (SomeStateData state) = do
   case parseTransition state botCtx of
     Nothing -> pure $ SomeStateData state
     Just (SomeTransition transition) -> do
-      (state' :: StateData to) <- nt $ handleTransition transition state
+      (state' :: to) <- nt $ handleTransition transition state
       nt (extractMessageContext state') >>= \case
         MessageContext extractedCtx -> do
           let stateCtx = getTaggedContext state'
