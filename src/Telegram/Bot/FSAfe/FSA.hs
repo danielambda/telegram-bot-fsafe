@@ -59,7 +59,7 @@ class HasState' s ts fsa where
 instance HasState' s '[] fsa where
   parseSomeTransition' _ _ _ = Nothing
 
-instance (IsState s m, IsState s' m, HasState' s ts fsa, HasState s' fsa ts')
+instance (Applicative m, IsState s m, IsState s' m, HasState' s ts fsa, HasState s' fsa ts')
       => HasState' s (Transition t s s' m ': ts) fsa where
   parseSomeTransition' (HCons Transition{..} ts) s botCtx
     =   SomeTransition Transition{..} <$> runBotContextParser (parseTransition s) botCtx
@@ -69,7 +69,7 @@ type IsState :: Type -> (Type -> Type) -> Constraint
 class IsState a m where
   type StateMessage a :: MessageKind
 
-  extractMessageContext :: a -> m (MessageContext a)
+  extractMessageContext :: Applicative m => a -> m (MessageContext a)
   default extractMessageContext ::
     ( Applicative m
     , IsMessage (Proper' (StateMessage a)) ctx
@@ -97,6 +97,6 @@ data Transition t from to m = Transition
 
 -- type SomeTransitionFrom :: (Type -> Type) -> k -> Type
 data SomeTransitionFrom from fsa m where
-  SomeTransition :: (Extract' to fsa ts, HasState to fsa ts, IsState to m, IsState from m)
+  SomeTransition :: (Applicative m, Extract' to fsa ts, HasState to fsa ts, IsState to m, IsState from m)
                  => Transition t from to m -> t -> SomeTransitionFrom from fsa m
 

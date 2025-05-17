@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -64,20 +65,20 @@ allValues :: (Enum a, Bounded a) => [a]
 allValues = [minBound..maxBound]
 
 data InitialState = InitialState deriving stock Generic
-instance IsState InitialState AppM where
+instance Monad m => IsState InitialState m where
   type StateMessage InitialState = AsMessage "Try /start"
 
 newtype ConfirmingOrder = ConfirmingOrder
   { pizza :: PizzaOrder }
   deriving stock Generic
-instance IsState ConfirmingOrder AppM where
+instance Monad m => IsState ConfirmingOrder m where
   type StateMessage ConfirmingOrder
     =  VarShow "pizza"
     :\ UnitCallbackBtn "Confirm" Confirm
 
 data SelectingSize0 = SelectingSize0
   deriving stock Generic
-instance IsState SelectingSize0 AppM where
+instance MonadReader PizzaContext m => IsState SelectingSize0 m where
   type StateMessage SelectingSize0
     =  AsMessage "Please, select size of your pizza:"
     :\ CallbackButtons (VarShow "size") SelectSize "pizzaSizes"
@@ -91,7 +92,7 @@ instance IsState SelectingSize0 AppM where
 newtype SelectingSize = SelectingSize
   { selectedSize :: PizzaSize }
   deriving stock Generic
-instance IsState SelectingSize AppM where
+instance MonadReader PizzaContext m => IsState SelectingSize m where
   type StateMessage SelectingSize
     =  F"You selected {show selectedSize} size"
     :\  "You selected " :|: VarShow "selectedSize" :|: " size"
@@ -107,7 +108,7 @@ data SelectingToppings = SelectingToppings
   { size :: PizzaSize
   , toppings :: [Topping]
   } deriving stock Generic
-instance IsState SelectingToppings AppM where
+instance MonadReader PizzaContext m => IsState SelectingToppings m where
   type StateMessage SelectingToppings
     =  "Please, select toppings for your pizza:"
     :\ Buttons "toppingButtons"
@@ -122,7 +123,7 @@ instance IsState SelectingToppings AppM where
             else callbackButton (tshow s) (AddTopping s)
 
 data StartSelectingSize = StartSelectingSize
-startSelectingSize :: Transition StartSelectingSize InitialState SelectingSize0 AppM
+startSelectingSize :: Applicative m => Transition StartSelectingSize InitialState SelectingSize0 m
 startSelectingSize = Transition{..} where
   parseTransition _ = StartSelectingSize <$ command "start"
   handleTransition _ _ = pure SelectingSize0
@@ -130,12 +131,12 @@ startSelectingSize = Transition{..} where
 newtype SelectSize = SelectSize { size :: PizzaSize }
   deriving stock (Show, Read, Generic)
   deriving IsCallbackData via ReadShow SelectSize
-selectSize0 :: Transition SelectSize SelectingSize0 SelectingSize AppM
+selectSize0 :: Applicative m => Transition SelectSize SelectingSize0 SelectingSize m
 selectSize0 = Transition{..} where
   parseTransition _ = callbackQueryDataRead @SelectSize
   handleTransition (SelectSize size) _ = pure $ SelectingSize size
 
-selectSize :: Transition SelectSize SelectingSize SelectingSize AppM
+selectSize :: Applicative m => Transition SelectSize SelectingSize SelectingSize m
 selectSize = Transition{..} where
   parseTransition _ = callbackQueryDataRead @SelectSize
   handleTransition (SelectSize size) _ = pure $ SelectingSize size
@@ -143,7 +144,7 @@ selectSize = Transition{..} where
 newtype AddTopping = AddTopping Topping
   deriving stock (Show, Read)
   deriving IsCallbackData via ReadShow AddTopping
-addTopping :: Transition AddTopping SelectingToppings SelectingToppings AppM
+addTopping :: Applicative m => Transition AddTopping SelectingToppings SelectingToppings m
 addTopping = Transition{..} where
   parseTransition _ = callbackQueryDataRead @AddTopping
   handleTransition (AddTopping topping) SelectingToppings{toppings, ..} =
@@ -152,7 +153,7 @@ addTopping = Transition{..} where
 newtype RemoveTopping = RemoveTopping Topping
   deriving stock (Show, Read)
   deriving IsCallbackData via ReadShow RemoveTopping
-removeTopping :: Transition RemoveTopping SelectingToppings SelectingToppings AppM
+removeTopping :: Applicative m => Transition RemoveTopping SelectingToppings SelectingToppings m
 removeTopping = Transition{..} where
   parseTransition _ = callbackQueryDataRead @RemoveTopping
   handleTransition (RemoveTopping topping) SelectingToppings{toppings, ..} =
@@ -162,7 +163,7 @@ data Confirm = Confirm
   deriving stock (Show, Read, Generic)
   deriving anyclass IsUnit
   deriving IsCallbackData via ReadShow Confirm
-confirmSize :: Transition Confirm SelectingSize SelectingToppings AppM
+confirmSize :: Applicative m => Transition Confirm SelectingSize SelectingToppings m
 confirmSize = Transition{..} where
   parseTransition _
     =   callbackQueryDataRead @Confirm
@@ -170,7 +171,7 @@ confirmSize = Transition{..} where
   handleTransition Confirm (SelectingSize size) =
     pure $ SelectingToppings size []
 
-confirmToppings :: Transition Confirm SelectingToppings ConfirmingOrder AppM
+confirmToppings :: Applicative m => Transition Confirm SelectingToppings ConfirmingOrder m
 confirmToppings = Transition{..} where
   parseTransition _
     =   callbackQueryDataRead @Confirm
@@ -178,7 +179,7 @@ confirmToppings = Transition{..} where
   handleTransition Confirm SelectingToppings{..} =
     pure $ ConfirmingOrder PizzaOrder{..}
 
-confirmOrder :: Transition Confirm ConfirmingOrder InitialState AppM
+confirmOrder :: Applicative m => Transition Confirm ConfirmingOrder InitialState m
 confirmOrder = Transition{..} where
   parseTransition _
     =   callbackQueryDataRead @Confirm
