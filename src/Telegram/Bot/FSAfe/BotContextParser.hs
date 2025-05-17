@@ -55,7 +55,7 @@ command commandName = do
                         , "/" <> commandName <> "@" <> botName
                         ]
   if cmd `elem` allowedCmds
-    then return $ T.stripStart rest
+    then pure $ T.stripStart rest
     else fail "not that command"
 
 -- | Obtain 'CallbackQuery' @data@ associated with the callback button in an inline keyboard if present in 'Update' message.
