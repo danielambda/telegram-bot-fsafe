@@ -23,8 +23,8 @@ import qualified Telegram.Bot.API as Tg
 import Servant.Client (ClientError, ClientM, runClientM)
 
 import Telegram.Bot.FSAfe.FSA
-  ( SomeTransitionFrom(..), SomeStateData(..)
-  , IsState (..), MessageContext (..), parseSomeTransition, HList, Transition (..)
+  ( SomeTransitionFrom(..), SomeState(..)
+  , IsState (..), MessageContext (..), parseSomeTransition, HList, Transition (..), Extract' (..)
   )
 import Telegram.Bot.FSAfe.BotM (BotM)
 import Control.Monad.Error.Class (catchError)
@@ -43,20 +43,20 @@ import Telegram.Bot.DSL (renderMessage, HasTaggedContext (getTaggedContext), (.+
 import Data.Proxy (Proxy(..))
 import Telegram.Bot.FSAfe.Reply (reply, toReplyMessage)
 
-tryAdvanceState :: (forall x. m x -> BotM x) -> SomeStateData m -> BotM (SomeStateData m)
-tryAdvanceState nt (SomeStateData ts state) = do
+tryAdvanceState ::  forall fsa. (forall x. BotM x -> BotM x) -> SomeState fsa -> BotM (SomeState fsa)
+tryAdvanceState nt (SomeState fsa (state :: from)) = do
   botCtx <- ask
-  case parseSomeTransition ts state botCtx of
-    Nothing -> pure $ SomeStateData ts state
+  case parseSomeTransition @from @fsa (extract (Proxy @from) fsa) state botCtx of
+    Nothing -> pure $ SomeState fsa state
     Just (SomeTransition Transition{..} transition) -> do
-      (state' :: to) <- nt $ handleTransition transition state
+      (state' :: to) <- nt $ pure $ handleTransition transition state
       nt (extractMessageContext state') >>= \case
         MessageContext extractedCtx -> do
           let stateCtx = getTaggedContext state'
           let ctx = extractedCtx .++ stateCtx
           let msg = renderMessage (Proxy @(StateMessage to)) ctx
           reply $ toReplyMessage msg
-      return $ SomeStateData ts state'
+      return $ SomeState fsa state'
 
 startBotGeneric
   :: (Tg.User -> state -> Tg.Update -> ClientM (Maybe state))
