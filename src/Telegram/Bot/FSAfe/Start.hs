@@ -28,29 +28,29 @@ import Data.Proxy (Proxy)
 getEnvToken :: String -> IO Tg.Token
 getEnvToken = fmap fromString . getEnv
 
-startBot_ :: (HasState a fsa ts BotM)
+startBot_ :: (HasState a fsa BotM)
           => Proxy fsa -> a -> Tg.Token -> IO ()
 startBot_ fsa = hoistStartBot_ fsa id
 
-startBot :: (HasState a fsa ts BotM)
+startBot :: (HasState a fsa BotM)
          => Proxy fsa -> a -> Tg.Token -> IO (Either ClientError ())
 startBot fsa = hoistStartBot fsa id
 
 hoistStartBot_
-  :: forall fsa a m ts. (HasState a fsa ts m)
+  :: forall fsa a m. (HasState a fsa m)
   => Proxy fsa -> (forall x. m x -> BotM x) -> a -> Tg.Token -> IO ()
 hoistStartBot_ fsa nt state token = void $ hoistStartBot fsa nt state token
 
 hoistStartBot
-  :: forall fsa a m ts. (HasState a fsa ts m)
+  :: forall fsa a m. (HasState a fsa m)
   => Proxy fsa -> (forall x. m x -> BotM x) -> a -> Tg.Token -> IO (Either ClientError ())
-hoistStartBot _ nt = startBotGeneric updateState . SomeState @a @fsa @ts
+hoistStartBot _ nt = startBotGeneric updateState . SomeState @a @fsa
   where
   updateState botUser state update =
     runBotM (tryAdvanceState nt state) (BotContext botUser update)
 
 startKeyedBot_
-  :: forall fsa a ts key. (Hashable key, HasState a fsa ts BotM)
+  :: forall fsa a key. (Hashable key, HasState a fsa BotM)
   => Proxy fsa
   -> (Tg.Update -> Maybe key)
   -> a
@@ -59,7 +59,7 @@ startKeyedBot_
 startKeyedBot_ fsa = hoistStartKeyedBot_ fsa id
 
 startKeyedBot
-  :: forall fsa a ts key. (Hashable key, HasState a fsa ts BotM)
+  :: forall fsa a key. (Hashable key, HasState a fsa BotM)
   => Proxy fsa
   -> (Tg.Update -> Maybe key)
   -> a
@@ -68,7 +68,7 @@ startKeyedBot
 startKeyedBot fsa = hoistStartKeyedBot fsa id
 
 hoistStartKeyedBot_
-  :: forall fsa a key m ts. (Hashable key, HasState a fsa ts m)
+  :: forall fsa a key m. (Hashable key, HasState a fsa m)
   => Proxy fsa
   -> (forall x. m x -> BotM x)
   -> (Tg.Update -> Maybe key)
@@ -79,7 +79,7 @@ hoistStartKeyedBot_ fsa nt toKey initialState token = void $
   hoistStartKeyedBot fsa nt toKey initialState token
 
 hoistStartKeyedBot
-  :: forall fsa a key m ts. (Hashable key, HasState a fsa ts m)
+  :: forall fsa a key m. (Hashable key, HasState a fsa m)
   => Proxy fsa
   -> (forall x. m x -> BotM x)
   -> (Tg.Update -> Maybe key)
@@ -90,7 +90,7 @@ hoistStartKeyedBot _ nt toKey initialState = startBotGeneric updateStateMap HM.e
   where
   updateStateMap botUser stateMap update = do
     let key = toKey update
-    let defState = SomeState @a @fsa @ts initialState
+    let defState = SomeState @a @fsa initialState
     let state = stateMap & HM.lookupDefault defState key
     runBotM (tryAdvanceState nt state) (BotContext botUser update) >>= \case
       Just nextState -> return $ Just $ stateMap & HM.insert key nextState

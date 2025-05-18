@@ -46,7 +46,7 @@ import Telegram.Bot.FSAfe.Reply (reply, toReplyMessage)
 tryAdvanceState :: forall fsa m. (forall x. m x -> BotM x) -> SomeState fsa m -> BotM (SomeState fsa m)
 tryAdvanceState nt (SomeState @s @_ @ts s) = do
   botCtx <- ask
-  case parseSomeTransition @s @fsa @ts @m s botCtx of
+  case parseSomeTransition @s @fsa @m s botCtx of
     Nothing -> pure $ SomeState s
     Just (SomeTransition t) -> do
       (s' :: s') <- nt $ handleTransition t s
