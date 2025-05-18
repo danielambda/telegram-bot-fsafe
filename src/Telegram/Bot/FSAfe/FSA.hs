@@ -24,6 +24,7 @@ import Control.Applicative ((<|>))
 import Data.Proxy (Proxy(..))
 import Telegram.Bot.FSAfe.BotContextParser (BotContextParser, runBotContextParser)
 
+type Extract' :: Type -> [(Type, [Type])] -> [Type] -> Constraint
 class Extract' s fsa ts | s fsa -> ts where
   extract :: Proxy s -> HList' fsa m -> HList ts m
 
@@ -46,6 +47,7 @@ data HList' fsa m where
   HNil' :: HList' '[] m
   HCons' :: forall a t ts m. HList t m -> HList' ts m -> HList' ('(a, t) ': ts) m
 
+type HasState :: Type -> [(Type, [Type])] -> [Type] -> Constraint
 class Extract' s fsa ts => HasState s fsa ts where
   parseSomeTransition :: HList ts m -> s -> BotContext -> Maybe (SomeTransitionFrom s fsa m)
 
@@ -79,23 +81,23 @@ class IsState a m where
 
 type MessageContext :: k -> Type
 data MessageContext a where
-  MessageContext
-    :: ( IsMessage (Proper' (StateMessage a)) ctx
-       , HasTaggedContext ctx0 a
-       , ctx ~ ctx1 ++ ctx0
-       )
-    => TaggedContext ctx1 -> MessageContext a
+  MessageContext ::
+    ( IsMessage (Proper' (StateMessage a)) ctx
+    , HasTaggedContext ctx0 a
+    , ctx ~ ctx1 ++ ctx0
+    ) => TaggedContext ctx1 -> MessageContext a
 
 type SomeState :: [(Type, [Type])] -> (Type -> Type) -> Type
 data SomeState fsa m where
   SomeState :: (Extract' s fsa ts, HasState s fsa ts) => HList' fsa m -> s -> SomeState fsa m
 
+type Transition :: Type -> Type -> Type -> (Type -> Type) -> Type
 data Transition t from to m = Transition
   { parseTransition :: from -> BotContextParser t
   , handleTransition :: t -> from -> m to
   }
 
--- type SomeTransitionFrom :: (Type -> Type) -> k -> Type
+type SomeTransitionFrom :: Type -> [(Type, [Type])] -> (Type -> Type) -> Type
 data SomeTransitionFrom from fsa m where
   SomeTransition :: (Applicative m, Extract' to fsa ts, HasState to fsa ts, IsState to m, IsState from m)
                  => Transition t from to m -> t -> SomeTransitionFrom from fsa m
