@@ -8,9 +8,9 @@
 -}
 
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeAbstractions #-}
 
 module Telegram.Bot.FSAfe.Start.Internal
@@ -21,27 +21,26 @@ module Telegram.Bot.FSAfe.Start.Internal
 import Data.Aeson.Types (parseEither, FromJSON (parseJSON))
 import qualified Telegram.Bot.API as Tg
 import Servant.Client (ClientError, ClientM, runClientM)
+import Telegram.Bot.DSL (renderMessage, HasTaggedContext (getTaggedContext), (.++))
 
-import Telegram.Bot.FSAfe.FSA
-  ( SomeTransitionFrom(..), SomeState(..)
-  , IsState (..), MessageContext (..), parseSomeTransition, IsTransition (..)
-  )
-import Telegram.Bot.FSAfe.BotM (BotM)
 import Control.Monad.Error.Class (catchError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad (forever)
 import Control.Monad.Reader (ask)
 import Control.Concurrent (threadDelay, killThread)
+import Control.Concurrent.Async (Async(asyncThreadId), async, link)
 import Control.Concurrent.STM
-    ( atomically,
-      newTVarIO, readTVarIO, writeTVar,
-      newTQueueIO, readTQueue, writeTQueue )
+  (atomically, newTVarIO, readTVarIO, writeTVar, newTQueueIO, readTQueue, writeTQueue)
 import Data.Either (partitionEithers)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
-import Control.Concurrent.Async (Async(asyncThreadId), async, link)
-import Telegram.Bot.DSL (renderMessage, HasTaggedContext (getTaggedContext), (.++))
 import Data.Proxy (Proxy(..))
+
 import Telegram.Bot.FSAfe.Reply (reply, toReplyMessage)
+import Telegram.Bot.FSAfe.BotM (BotM)
+import Telegram.Bot.FSAfe.FSA
+  ( SomeTransitionFrom(..), SomeState(..)
+  , IsState (..), MessageContext (..), parseSomeTransition, IsTransition (..)
+  )
 
 tryAdvanceState :: forall fsa m. (forall x. m x -> BotM x) -> SomeState fsa m -> BotM (SomeState fsa m)
 tryAdvanceState nt (SomeState @s @_ @ts s) = do

@@ -16,14 +16,15 @@ import Data.Hashable (Hashable)
 import qualified Telegram.Bot.API as Tg
 import Servant.Client (ClientError)
 
-import Telegram.Bot.FSAfe.BotM (BotContext(..), runBotM, BotM)
-import Telegram.Bot.FSAfe.FSA (SomeState(..), HasState)
 import Control.Monad (void)
 import Data.Function ((&))
+import Data.Proxy (Proxy)
 import Data.String (fromString)
 import System.Environment (getEnv)
+
+import Telegram.Bot.FSAfe.BotM (BotContext(..), runBotM, BotM)
+import Telegram.Bot.FSAfe.FSA (SomeState(..), HasState)
 import Telegram.Bot.FSAfe.Start.Internal (tryAdvanceState, startBotGeneric)
-import Data.Proxy (Proxy)
 
 getEnvToken :: String -> IO Tg.Token
 getEnvToken = fmap fromString . getEnv

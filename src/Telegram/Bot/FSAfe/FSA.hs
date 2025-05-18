@@ -17,10 +17,12 @@ import Data.Kind (Type, Constraint)
 import Telegram.Bot.DSL (IsMessage, MessageKind, Proper', HasTaggedContext (..), type (++))
 import Telegram.Bot.DSL.TaggedContext  (TaggedContext (..))
 
-import Telegram.Bot.FSAfe.BotM (BotContext)
 import Control.Applicative ((<|>))
+
+import Telegram.Bot.FSAfe.BotM (BotContext)
 import Telegram.Bot.FSAfe.BotContextParser (BotContextParser, runBotContextParser)
 
+type Extract :: Type -> [(Type, [Type])] -> [Type]
 type family Extract s fsa where
   Extract _ '[] = '[]
   Extract s ('(s, ts) ': fsa) = ts
@@ -30,7 +32,8 @@ type HasState :: Type -> [(Type, [Type])] -> (Type -> Type) -> Constraint
 class HasState s fsa m where
   parseSomeTransition :: s -> BotContext -> Maybe (SomeTransitionFrom s fsa m)
 
-instance (HasState' s (Extract s fsa) fsa m) => HasState s fsa m where
+instance (HasState' s (Extract s fsa) fsa m)
+      => HasState s fsa m where
   parseSomeTransition = parseSomeTransition' @s @(Extract s fsa)
 
 type HasState' :: Type -> [Type] -> [(Type, [Type])] -> (Type -> Type) -> Constraint
@@ -40,7 +43,13 @@ class HasState' s ts fsa m where
 instance HasState' s '[] fsa m where
   parseSomeTransition' _ _ = Nothing
 
-instance (IsTransition t s s' m, Applicative m, IsState s m, IsState s' m, HasState' s ts fsa m, HasState s' fsa m)
+instance ( Applicative m
+         , IsState s m
+         , IsTransition t s s' m
+         , IsState s' m
+         , HasState s' fsa m
+         , HasState' s ts fsa m
+         )
       => HasState' s (t ': ts) fsa m where
   parseSomeTransition' s botCtx
     =   SomeTransition <$> runBotContextParser (parseTransition @t @s @s' @m s) botCtx
@@ -68,7 +77,7 @@ data MessageContext a where
 
 type SomeState :: [(Type, [Type])] -> (Type -> Type) -> Type
 data SomeState fsa m where
-  SomeState :: (HasState s fsa m) => s -> SomeState fsa m
+  SomeState :: HasState s fsa m => s -> SomeState fsa m
 
 class IsTransition t s s' m | t s -> s' where
   parseTransition :: s -> BotContextParser t
@@ -76,7 +85,11 @@ class IsTransition t s s' m | t s -> s' where
 
 type SomeTransitionFrom :: Type -> [(Type, [Type])] -> (Type -> Type) -> Type
 data SomeTransitionFrom s fsa m where
-  SomeTransition :: ( IsTransition t s s' m, Applicative m
-                    , HasState s' fsa m, IsState s' m, IsState s m)
-                 => t -> SomeTransitionFrom s fsa m
+  SomeTransition ::
+    ( Applicative m
+    , IsState s m
+    , IsTransition t s s' m
+    , IsState s' m
+    , HasState s' fsa m
+    ) => t -> SomeTransitionFrom s fsa m
 

@@ -16,16 +16,10 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Main where
+module Main (main) where
 
-import Telegram.Bot.FSAfe.Start (getEnvToken, hoistStartKeyedBot_)
-import Telegram.Bot.FSAfe.BotContextParser (callbackQueryDataRead, command)
-import Telegram.Bot.FSAfe.FSA (IsTransition(..), MessageContext(..), IsState(..))
-
-import Telegram.Bot.API as Tg (updateChatId)
-import Control.Monad.Reader (Reader, runReader, MonadReader (..), asks)
-import Control.Applicative ((<|>))
 import qualified Data.Text as T
+import Telegram.Bot.API as Tg (updateChatId)
 import Telegram.Bot.DSL
   ( CallbackButtons, HasTaggedContext(..), UnitCallbackBtn, IsUnit(..), ReadShow(..)
   , IsCallbackData, andLet, VarShow, F
@@ -33,8 +27,15 @@ import Telegram.Bot.DSL
   , TaggedContext(..), Tagged(..)
   , callbackButton, Buttons
   )
+
 import GHC.Generics (Generic)
 import Data.Proxy (Proxy(..))
+import Control.Monad.Reader (Reader, runReader, MonadReader (..), asks)
+import Control.Applicative ((<|>))
+
+import Telegram.Bot.FSAfe.Start (getEnvToken, hoistStartKeyedBot_)
+import Telegram.Bot.FSAfe.BotContextParser (callbackQueryDataRead, command)
+import Telegram.Bot.FSAfe.FSA (IsTransition(..), MessageContext(..), IsState(..))
 
 tshow :: Show a => a -> T.Text
 tshow = T.pack . show

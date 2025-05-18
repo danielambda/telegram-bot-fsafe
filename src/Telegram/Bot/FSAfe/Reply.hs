@@ -14,14 +14,13 @@ module Telegram.Bot.FSAfe.Reply where
 
 import Data.Text (Text)
 import Telegram.Bot.API hiding (Message, editMessageText, editMessageReplyMarkup)
+import Telegram.Bot.DSL.Message (Message(..), textMessage)
 
 import Control.Applicative ((<|>))
 import Control.Monad (void, (<=<))
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Reader (asks)
 import GHC.Generics (Generic)
-
-import Telegram.Bot.DSL.Message (Message(..), textMessage)
 
 import Telegram.Bot.FSAfe.RunTG (runTG)
 import Telegram.Bot.FSAfe.BotM (BotContext(..), MonadBot (..))
