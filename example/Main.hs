@@ -20,7 +20,7 @@ module Main where
 
 import Telegram.Bot.FSAfe.Start (getEnvToken, hoistStartKeyedBot_)
 import Telegram.Bot.FSAfe.BotContextParser (callbackQueryDataRead, command)
-import Telegram.Bot.FSAfe.FSA (MessageContext(..), IsState(..), HList'(..), HList(..), Transition(..))
+import Telegram.Bot.FSAfe.FSA (IsTransition(..), MessageContext(..), IsState(..))
 
 import Telegram.Bot.API as Tg (updateChatId)
 import Control.Monad.Reader (Reader, runReader, MonadReader (..), asks)
@@ -34,6 +34,7 @@ import Telegram.Bot.DSL
   , callbackButton, Buttons
   )
 import GHC.Generics (Generic)
+import Data.Proxy (Proxy(..))
 
 tshow :: Show a => a -> T.Text
 tshow = T.pack . show
@@ -123,29 +124,25 @@ instance MonadReader PizzaContext m => IsState SelectingToppings m where
             else callbackButton (tshow s) (AddTopping s)
 
 data StartSelectingSize = StartSelectingSize
-startSelectingSize :: Applicative m => Transition StartSelectingSize InitialState SelectingSize0 m
-startSelectingSize = Transition{..} where
+instance Applicative m => IsTransition StartSelectingSize InitialState SelectingSize0 m where
   parseTransition _ = StartSelectingSize <$ command "start"
   handleTransition _ _ = pure SelectingSize0
 
 newtype SelectSize = SelectSize { size :: PizzaSize }
   deriving stock (Show, Read, Generic)
   deriving IsCallbackData via ReadShow SelectSize
-selectSize0 :: Applicative m => Transition SelectSize SelectingSize0 SelectingSize m
-selectSize0 = Transition{..} where
+instance Applicative m => IsTransition SelectSize SelectingSize0 SelectingSize m where
   parseTransition _ = callbackQueryDataRead @SelectSize
   handleTransition (SelectSize size) _ = pure $ SelectingSize size
 
-selectSize :: Applicative m => Transition SelectSize SelectingSize SelectingSize m
-selectSize = Transition{..} where
+instance Applicative m => IsTransition SelectSize SelectingSize SelectingSize m where
   parseTransition _ = callbackQueryDataRead @SelectSize
   handleTransition (SelectSize size) _ = pure $ SelectingSize size
 
 newtype AddTopping = AddTopping Topping
   deriving stock (Show, Read)
   deriving IsCallbackData via ReadShow AddTopping
-addTopping :: Applicative m => Transition AddTopping SelectingToppings SelectingToppings m
-addTopping = Transition{..} where
+instance Applicative m => IsTransition AddTopping SelectingToppings SelectingToppings m where
   parseTransition _ = callbackQueryDataRead @AddTopping
   handleTransition (AddTopping topping) SelectingToppings{toppings, ..} =
     pure $ SelectingToppings{toppings = topping:toppings, ..}
@@ -153,8 +150,7 @@ addTopping = Transition{..} where
 newtype RemoveTopping = RemoveTopping Topping
   deriving stock (Show, Read)
   deriving IsCallbackData via ReadShow RemoveTopping
-removeTopping :: Applicative m => Transition RemoveTopping SelectingToppings SelectingToppings m
-removeTopping = Transition{..} where
+instance Applicative m => IsTransition RemoveTopping SelectingToppings SelectingToppings m where
   parseTransition _ = callbackQueryDataRead @RemoveTopping
   handleTransition (RemoveTopping topping) SelectingToppings{toppings, ..} =
     pure $ SelectingToppings{toppings = filter (/= topping) toppings, ..}
@@ -163,24 +159,21 @@ data Confirm = Confirm
   deriving stock (Show, Read, Generic)
   deriving anyclass IsUnit
   deriving IsCallbackData via ReadShow Confirm
-confirmSize :: Applicative m => Transition Confirm SelectingSize SelectingToppings m
-confirmSize = Transition{..} where
+instance Applicative m => IsTransition Confirm SelectingSize SelectingToppings m where
   parseTransition _
     =   callbackQueryDataRead @Confirm
     <|> Confirm <$ command "confirm"
   handleTransition Confirm (SelectingSize size) =
     pure $ SelectingToppings size []
 
-confirmToppings :: Applicative m => Transition Confirm SelectingToppings ConfirmingOrder m
-confirmToppings = Transition{..} where
+instance Applicative m => IsTransition Confirm SelectingToppings ConfirmingOrder m where
   parseTransition _
     =   callbackQueryDataRead @Confirm
     <|> Confirm <$ command "confirm"
   handleTransition Confirm SelectingToppings{..} =
     pure $ ConfirmingOrder PizzaOrder{..}
 
-confirmOrder :: Applicative m => Transition Confirm ConfirmingOrder InitialState m
-confirmOrder = Transition{..} where
+instance Applicative m => IsTransition Confirm ConfirmingOrder InitialState m where
   parseTransition _
     =   callbackQueryDataRead @Confirm
     <|> Confirm <$ command "confirm"
@@ -190,41 +183,19 @@ confirmOrder = Transition{..} where
 newtype AppM a = AppM { runAppM :: Reader PizzaContext a }
   deriving newtype (Functor, Applicative, Monad, MonadReader PizzaContext)
 
-type a :>- b = Transition a b
-type ab :-> c = ab c
-type abc :@ m = abc m
 type FSA =
- '[ '(InitialState,
-      '[Transition StartSelectingSize InitialState SelectingSize0 AppM])
-  , '(SelectingSize0,
-      '[Transition SelectSize SelectingSize0 SelectingSize AppM])
-  , '(SelectingSize,
-      '[ Transition SelectSize SelectingSize SelectingSize AppM
-       , Transition Confirm SelectingSize SelectingToppings AppM
-       ]
-     )
-  , '(SelectingToppings,
-      '[ AddTopping    :>- SelectingToppings :-> SelectingToppings :@ AppM
-       , RemoveTopping :>- SelectingToppings :-> SelectingToppings :@ AppM
-       , Confirm       :>- SelectingToppings :-> ConfirmingOrder   :@ AppM
-       ]
-     )
-  , '(ConfirmingOrder,
-      '[Transition Confirm ConfirmingOrder InitialState AppM])
+ '[ '(InitialState, '[StartSelectingSize])
+  , '(SelectingSize0, '[SelectSize])
+  , '(SelectingSize, '[SelectSize, Confirm])
+  , '(SelectingToppings, '[AddTopping, RemoveTopping, Confirm])
+  , '(ConfirmingOrder, '[Confirm])
   ]
-fsa :: HList' FSA AppM
-fsa = HCons' @InitialState      (HCons startSelectingSize HNil)
-    $ HCons' @SelectingSize0    (HCons selectSize0 HNil)
-    $ HCons' @SelectingSize     (HCons selectSize (HCons confirmSize HNil))
-    $ HCons' @SelectingToppings (HCons addTopping (HCons removeTopping (HCons confirmToppings HNil)))
-    $ HCons' @ConfirmingOrder   (HCons confirmOrder HNil)
-      HNil'
 
 main :: IO ()
 main = do
   tgToken <- getEnvToken "TELEGRAM_BOT_TOKEN"
   putStrLn "bot is running"
-  hoistStartKeyedBot_ fsa nt updateChatId InitialState tgToken
+  hoistStartKeyedBot_ (Proxy @FSA) nt updateChatId InitialState tgToken
   where
     nt = return . flip runReader ctx . runAppM
     ctx = PizzaContext

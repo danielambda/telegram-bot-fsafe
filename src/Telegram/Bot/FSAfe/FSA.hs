@@ -2,16 +2,15 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module Telegram.Bot.FSAfe.FSA
   ( IsState(..), SomeState(..)
   , SomeTransitionFrom(..)
   , MessageContext(..)
   , HasState(..)
-  , HList(..), HList'(..)
-  , Transition(..)
-  , Extract'(..)
+  , Extract'
+  , IsTransition(..)
   ) where
 
 import Data.Kind (Type, Constraint)
@@ -21,51 +20,33 @@ import Telegram.Bot.DSL.TaggedContext  (TaggedContext (..))
 
 import Telegram.Bot.FSAfe.BotM (BotContext)
 import Control.Applicative ((<|>))
-import Data.Proxy (Proxy(..))
 import Telegram.Bot.FSAfe.BotContextParser (BotContextParser, runBotContextParser)
 
 type Extract' :: Type -> [(Type, [Type])] -> [Type] -> Constraint
 class Extract' s fsa ts | s fsa -> ts where
-  extract :: Proxy s -> HList' fsa m -> HList ts m
-
 instance Extract' s '[] '[] where
-  extract _ HNil' = HNil
-
 instance {-# OVERLAPPING #-} Extract' s ('(s, ts) ': fsa) ts where
-  extract _ (HCons' ts _) = ts
-
 instance {-# OVERLAPPABLE #-} Extract' s fsa ts => Extract' s ('(x, xts) ': fsa) ts where
-  extract s (HCons' _ fsa) = extract s fsa
 
-type HList :: [Type] -> (Type -> Type) -> Type
-data HList ts m where
-  HNil :: HList '[] m
-  HCons :: Transition t s s' m -> HList ts m -> HList (Transition t s s' m ': ts) m
+type HasState :: Type -> [(Type, [Type])] -> [Type] -> (Type -> Type) -> Constraint
+class Extract' s fsa ts => HasState s fsa ts m where
+  parseSomeTransition :: s -> BotContext -> Maybe (SomeTransitionFrom s fsa m)
 
-type HList' :: [(Type, [Type])] -> (Type -> Type) -> Type
-data HList' fsa m where
-  HNil' :: HList' '[] m
-  HCons' :: forall a t ts m. HList t m -> HList' ts m -> HList' ('(a, t) ': ts) m
+instance (Extract' s fsa ts, HasState' s ts fsa m) => HasState s fsa ts m where
+  parseSomeTransition = parseSomeTransition' @s @ts
 
-type HasState :: Type -> [(Type, [Type])] -> [Type] -> Constraint
-class Extract' s fsa ts => HasState s fsa ts where
-  parseSomeTransition :: HList ts m -> s -> BotContext -> Maybe (SomeTransitionFrom s fsa m)
+type HasState' :: Type -> [Type] -> [(Type, [Type])] -> (Type -> Type) -> Constraint
+class HasState' s ts fsa m where
+  parseSomeTransition' :: s -> BotContext -> Maybe (SomeTransitionFrom s fsa m)
 
-instance (Extract' s fsa ts, HasState' s ts fsa) => HasState s fsa ts where
-  parseSomeTransition = parseSomeTransition'
+instance HasState' s '[] fsa m where
+  parseSomeTransition' _ _ = Nothing
 
-type HasState' :: Type -> [Type] -> [(Type, [Type])] -> Constraint
-class HasState' s ts fsa where
-  parseSomeTransition' :: HList ts m -> s -> BotContext -> Maybe (SomeTransitionFrom s fsa m)
-
-instance HasState' s '[] fsa where
-  parseSomeTransition' _ _ _ = Nothing
-
-instance (Applicative m, IsState s m, IsState s' m, HasState' s ts fsa, HasState s' fsa ts')
-      => HasState' s (Transition t s s' m ': ts) fsa where
-  parseSomeTransition' (HCons Transition{..} ts) s botCtx
-    =   SomeTransition Transition{..} <$> runBotContextParser (parseTransition s) botCtx
-    <|> parseSomeTransition' ts s botCtx
+instance (IsTransition t s s' m, Applicative m, IsState s m, IsState s' m, HasState' s ts fsa m, HasState s' fsa ts' m)
+      => HasState' s (t ': ts) fsa m where
+  parseSomeTransition' s botCtx
+    =   SomeTransition <$> runBotContextParser (parseTransition @t @s @s' @m s) botCtx
+    <|> parseSomeTransition' @s @ts s botCtx
 
 type IsState :: Type -> (Type -> Type) -> Constraint
 class IsState a m where
@@ -89,16 +70,15 @@ data MessageContext a where
 
 type SomeState :: [(Type, [Type])] -> (Type -> Type) -> Type
 data SomeState fsa m where
-  SomeState :: (Extract' s fsa ts, HasState s fsa ts) => HList' fsa m -> s -> SomeState fsa m
+  SomeState :: (Extract' s fsa ts, HasState s fsa ts m) => s -> SomeState fsa m
 
-type Transition :: Type -> Type -> Type -> (Type -> Type) -> Type
-data Transition t from to m = Transition
-  { parseTransition :: from -> BotContextParser t
-  , handleTransition :: t -> from -> m to
-  }
+class IsTransition t s s' m | t s -> s' where
+  parseTransition :: s -> BotContextParser t
+  handleTransition :: t -> s -> m s'
 
 type SomeTransitionFrom :: Type -> [(Type, [Type])] -> (Type -> Type) -> Type
-data SomeTransitionFrom from fsa m where
-  SomeTransition :: (Applicative m, Extract' to fsa ts, HasState to fsa ts, IsState to m, IsState from m)
-                 => Transition t from to m -> t -> SomeTransitionFrom from fsa m
+data SomeTransitionFrom s fsa m where
+  SomeTransition :: ( IsTransition t s s' m, Applicative m, Extract' s' fsa ts
+                    , HasState s' fsa ts m, IsState s' m, IsState s m)
+                 => t -> SomeTransitionFrom s fsa m
 
