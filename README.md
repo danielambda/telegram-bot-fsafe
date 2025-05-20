@@ -11,13 +11,13 @@ Library for building Telegram bots in Haskell based on type safe FSA architectur
 ## Example
 
 [Here](example) you can see example of using this library for builing telegram bot.
-To build and run the example with cabal use
+To build and run the example with nix use
+``` bash
+nix build
+nix run
+```
+If you are using cabal, run
 ``` bash
 cabal build telegram-bot-fsafe-example
 cabal run telegram-bot-fsafe-example
-```
-If you are using stack, run
-``` bash
-stack build telegram-bot-fsafe-example
-stack run telegram-bot-fsafe-example
 ```
