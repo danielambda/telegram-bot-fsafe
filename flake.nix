@@ -25,6 +25,12 @@
         devShells.default = pkgs.mkShell {
           inputsFrom = [config.haskellProjects.default.outputs.devShell];
           packages = [pkgs.nixd];
+
+          shellHook = ''
+            set -a
+            source ./.env
+            set +a
+          '';
         };
 
         packages.default = self'.packages.telegram-bot-fsafe;
