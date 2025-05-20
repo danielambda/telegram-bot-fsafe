@@ -1,9 +1,4 @@
-cabal-version: 1.12
-
--- This file has been generated from package.yaml by hpack version 0.37.0.
---
--- see: https://github.com/sol/hpack
-
+cabal-version:  3.0
 name:           telegram-bot-fsafe
 version:        0.1.0.0
 license:        MIT
@@ -68,4 +63,4 @@ executable telegram-bot-fsafe-example
     , telegram-bot-fsafe
     , telegram-bot-message-dsl
     , text
-  default-language: Haskell2010
+  default-language: GHC2021
