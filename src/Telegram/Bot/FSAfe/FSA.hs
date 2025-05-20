@@ -21,20 +21,36 @@ import Control.Applicative ((<|>))
 
 import Telegram.Bot.FSAfe.BotM (BotContext)
 import Telegram.Bot.FSAfe.BotContextParser (BotContextParser, runBotContextParser)
+import GHC.TypeError (TypeError, ErrorMessage(..))
+import Data.Type.Bool (If)
 
-type Extract :: Type -> [(Type, [Type])] -> [Type]
+type Extract :: Type -> [(Type, k)] -> Maybe k
 type family Extract s fsa where
-  Extract _ '[] = '[]
-  Extract s ('(s, ts) ': fsa) = ts
+  Extract _ '[] = 'Nothing
+  Extract s ('(s, ts) ': fsa) = Just ts
   Extract s ('(x, xts) ': fsa) = Extract s fsa
+
+type IsJust :: Maybe a -> Bool
+type family IsJust m where
+  IsJust ('Just _) = 'True
+  IsJust 'Nothing = 'False
 
 type HasState :: Type -> [(Type, [Type])] -> (Type -> Type) -> Constraint
 class HasState s fsa m where
   parseSomeTransition :: s -> BotContext -> Maybe (SomeTransitionFrom s fsa m)
 
-instance (HasState' s (Extract s fsa) fsa m)
+instance ( HasState' s ts fsa m
+         , If (IsJust (Extract s fsa))
+            ('Just ts ~ Extract s fsa)
+            (TypeError
+              ( ShowType fsa
+              :<>: Text " does not specify transitions for state "
+              :<>: ShowType s
+              )
+            )
+         )
       => HasState s fsa m where
-  parseSomeTransition = parseSomeTransition' @s @(Extract s fsa)
+  parseSomeTransition = parseSomeTransition' @s @ts
 
 type HasState' :: Type -> [Type] -> [(Type, [Type])] -> (Type -> Type) -> Constraint
 class HasState' s ts fsa m where
