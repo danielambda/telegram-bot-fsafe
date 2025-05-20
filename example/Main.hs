@@ -14,19 +14,20 @@ import Telegram.Bot.API as Tg (updateChatId)
 import Telegram.Bot.DSL
   ( CallbackButtons, UnitCallbackBtn, IsUnit(..), ReadShow(..)
   , IsCallbackData, andLet, VarShow, F
-  , (:|:), (:\), AsMessage
+  , (:\), AsMessage
   , TaggedContext(..), Tagged(..)
   , callbackButton, Buttons
   )
 
 import GHC.Generics (Generic)
 import Data.Proxy (Proxy(..))
-import Control.Monad.Reader (Reader, runReader, MonadReader (..), asks)
-import Control.Applicative ((<|>))
+import Control.Monad.Reader (ReaderT(..), Reader, runReader, MonadReader (..), asks)
 
 import Telegram.Bot.FSAfe.Start (getEnvToken, hoistStartKeyedBot_)
-import Telegram.Bot.FSAfe.BotContextParser (callbackQueryDataRead, command)
-import Telegram.Bot.FSAfe.FSA (HandleTransition(..), MessageContext(..), IsState(..), ParseTransition (..))
+import Telegram.Bot.FSAfe.FSA
+  ( HandleTransition(..), MessageContext(..), IsState(..)
+  , ParseTransition, CallbackQueryData(..), CommandUnit(..), Or(..)
+  )
 
 tshow :: Show a => a -> T.Text
 tshow = T.pack . show
@@ -35,7 +36,7 @@ data PizzaOrder
   = PizzaOrder
   { size :: PizzaSize
   , toppings :: [Topping]
-  } deriving stock (Read, Show, Generic)
+  } deriving stock (Read, Show)
     deriving IsCallbackData via ReadShow PizzaOrder
 
 data PizzaContext
@@ -85,7 +86,7 @@ newtype SelectingSize = SelectingSize
 instance MonadReader PizzaContext m => IsState SelectingSize m where
   type StateMessage SelectingSize
     =  F"You selected {show selectedSize} size"
-    :\  "You selected " :|: VarShow "selectedSize" :|: " size"
+    -- :\  "You selected " :|: VarShow "selectedSize" :|: " size"
     :\ CallbackButtons (VarShow "size") SelectSize "pizzaSizes"
     :\ UnitCallbackBtn "Confirm" Confirm
 
@@ -113,24 +114,22 @@ instance MonadReader PizzaContext m => IsState SelectingToppings m where
             else callbackButton (tshow s) (AddTopping s)
 
 data StartSelectingSize = StartSelectingSize
-instance ParseTransition StartSelectingSize InitialState where
-  parseTransition _ = StartSelectingSize <$ command "start"
+  deriving (Generic, IsUnit)
+  deriving ParseTransition via CommandUnit "start" StartSelectingSize
 instance HandleTransition StartSelectingSize InitialState SelectingSize0 where
   handleTransition _ _ = SelectingSize0
 
 newtype SelectSize = SelectSize { size :: PizzaSize }
   deriving stock (Show, Read, Generic)
   deriving IsCallbackData via ReadShow SelectSize
-instance ParseTransition SelectSize s where
-  parseTransition _ = callbackQueryDataRead
+  deriving ParseTransition via CallbackQueryData SelectSize
 instance HandleTransition SelectSize s SelectingSize where
   handleTransition (SelectSize size) _ = SelectingSize size
 
 newtype AddTopping = AddTopping Topping
   deriving stock (Show, Read)
   deriving IsCallbackData via ReadShow AddTopping
-instance ParseTransition AddTopping s where
-  parseTransition _ = callbackQueryDataRead
+  deriving ParseTransition via CallbackQueryData AddTopping
 instance HandleTransition AddTopping SelectingToppings SelectingToppings where
   handleTransition (AddTopping topping) SelectingToppings{toppings, ..} =
     SelectingToppings{toppings = topping:toppings, ..}
@@ -138,38 +137,24 @@ instance HandleTransition AddTopping SelectingToppings SelectingToppings where
 newtype RemoveTopping = RemoveTopping Topping
   deriving stock (Show, Read)
   deriving IsCallbackData via ReadShow RemoveTopping
-
-instance ParseTransition RemoveTopping s where
-  parseTransition _ = callbackQueryDataRead
+  deriving ParseTransition via CallbackQueryData RemoveTopping
 instance HandleTransition RemoveTopping SelectingToppings SelectingToppings where
   handleTransition (RemoveTopping topping) SelectingToppings{toppings, ..} =
     SelectingToppings{toppings = filter (/= topping) toppings, ..}
 
 data Confirm = Confirm
-  deriving stock (Show, Read, Generic)
-  deriving anyclass IsUnit
+  deriving (Read, Show, Generic, IsUnit)
   deriving IsCallbackData via ReadShow Confirm
-
-instance ParseTransition Confirm s where
-  parseTransition _
-    =   callbackQueryDataRead
-    <|> Confirm <$ command "confirm"
+  deriving ParseTransition via (CommandUnit "confirm" `Or` CallbackQueryData) Confirm
 instance HandleTransition Confirm SelectingSize SelectingToppings where
   handleTransition Confirm (SelectingSize size) = SelectingToppings size []
-
 instance HandleTransition Confirm SelectingToppings ConfirmingOrder where
   handleTransition Confirm SelectingToppings{..} = ConfirmingOrder PizzaOrder{..}
-
 instance HandleTransition Confirm ConfirmingOrder InitialState where
   handleTransition Confirm ConfirmingOrder{} = InitialState
 
 newtype AppM a = AppM { runAppM :: Reader PizzaContext a }
   deriving newtype (Functor, Applicative, Monad, MonadReader PizzaContext)
-
-data Id = Id
-instance ParseTransition Id a where parseTransition _ = pure Id
-instance HandleTransition Id a a where handleTransition _ = id
--- instance Monad m => HandleTransition' Id a a m where handleTransition' _ = return
 
 type FSA =
  '[ '(InitialState, '[StartSelectingSize])
