@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE LambdaCase #-}
 
 module Telegram.Bot.FSAfe.Start

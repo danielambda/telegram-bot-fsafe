@@ -7,7 +7,6 @@
   All rights reserved.
 -}
 
-{-# LANGUAGE DeriveGeneric   #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Telegram.Bot.FSAfe.Reply where

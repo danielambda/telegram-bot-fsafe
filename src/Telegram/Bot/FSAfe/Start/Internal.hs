@@ -7,10 +7,7 @@
   All rights reserved.
 -}
 
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeAbstractions #-}
 
 module Telegram.Bot.FSAfe.Start.Internal

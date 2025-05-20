@@ -1,6 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 

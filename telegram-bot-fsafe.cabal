@@ -20,17 +20,8 @@ library
   hs-source-dirs:
       src
   default-extensions:
-      ConstraintKinds
       DataKinds
-      DefaultSignatures
-      DerivingStrategies
-      DerivingVia
       FunctionalDependencies
-      GADTs
-      NoStarIsType
-      PolyKinds
-      StandaloneKindSignatures
-      TypeApplications
       TypeFamilies
       TypeOperators
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints

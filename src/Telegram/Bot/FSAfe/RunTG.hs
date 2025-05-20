@@ -7,8 +7,6 @@
   All rights reserved.
 -}
 
-{-# LANGUAGE FlexibleInstances #-}
-
 module Telegram.Bot.FSAfe.RunTG where
 
 import Telegram.Bot.API

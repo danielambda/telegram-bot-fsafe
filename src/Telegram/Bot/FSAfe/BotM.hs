@@ -7,8 +7,6 @@
   All rights reserved.
 -}
 
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
 module Telegram.Bot.FSAfe.BotM
   ( BotM, BotContext(..)
   , liftClientM, runBotM
