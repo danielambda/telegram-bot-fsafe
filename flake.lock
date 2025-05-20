@@ -75,11 +75,11 @@
     "telegram-bot-message-dsl": {
       "flake": false,
       "locked": {
-        "lastModified": 1746612856,
-        "narHash": "sha256-XY/xxEx+SfD6Re6NuCB3RksmJjnerNqbMRoZCcrNvMM=",
+        "lastModified": 1747743750,
+        "narHash": "sha256-Vkhima7lLOVHIg1daboCQlCHbdB4vny3OMoTeXcIkmU=",
         "owner": "danielambda",
         "repo": "telegram-bot-message-dsl",
-        "rev": "ce9da578810ab3f7ac309200e38b067a0faf5e34",
+        "rev": "0fecdff69fdb74918900eb7c928037f830616d6f",
         "type": "github"
       },
       "original": {

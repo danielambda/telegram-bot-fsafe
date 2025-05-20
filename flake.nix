@@ -4,10 +4,7 @@
     flake-parts.url = "github:hercules-ci/flake-parts";
     haskell-flake.url = "github:srid/haskell-flake";
 
-    telegram-bot-message-dsl = {
-      url = "github:danielambda/telegram-bot-message-dsl";
-      flake = false;
-    };
+    telegram-bot-message-dsl.url = "github:danielambda/telegram-bot-message-dsl";
   };
 
   outputs = inputs@{ nixpkgs, flake-parts, ... }:
