@@ -36,7 +36,7 @@ import Telegram.Bot.FSAfe.Reply (reply, toReplyMessage)
 import Telegram.Bot.FSAfe.BotM (BotM)
 import Telegram.Bot.FSAfe.FSA
   ( SomeTransitionFrom(..), SomeState(..)
-  , IsState (..), MessageContext (..), parseSomeTransition, IsTransition (..)
+  , IsState (..), MessageContext (..), parseSomeTransition, HandleTransitionM(..)
   )
 
 tryAdvanceState :: forall fsa m. (forall x. m x -> BotM x) -> SomeState fsa m -> BotM (SomeState fsa m)
@@ -45,7 +45,7 @@ tryAdvanceState nt (SomeState @s @_ @ts s) = do
   case parseSomeTransition @s @fsa @m s botCtx of
     Nothing -> pure $ SomeState s
     Just (SomeTransition t) -> do
-      (s' :: s') <- nt $ handleTransition t s
+      (s' :: s') <- nt $ handleTransitionM t s
       nt (extractMessageContext s') >>= \case
         MessageContext extractedCtx -> do
           let stateCtx = getTaggedContext s'

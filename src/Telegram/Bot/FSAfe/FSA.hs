@@ -7,7 +7,9 @@ module Telegram.Bot.FSAfe.FSA
   , SomeTransitionFrom(..)
   , MessageContext(..)
   , HasState(..)
-  , IsTransition(..)
+  , ParseTransition(..)
+  , HandleTransition(..)
+  , HandleTransitionM(..)
   ) where
 
 import Data.Kind (Type, Constraint)
@@ -59,14 +61,15 @@ instance HasState' s '[] fsa m where
 
 instance ( Applicative m
          , IsState s m
-         , IsTransition t s s' m
+         , ParseTransition t s
+         , HandleTransitionM t s s' m
          , IsState s' m
          , HasState s' fsa m
          , HasState' s ts fsa m
          )
       => HasState' s (t ': ts) fsa m where
   parseSomeTransition' s botCtx
-    =   SomeTransition <$> runBotContextParser (parseTransition @t @s @s' @m s) botCtx
+    =   SomeTransition <$> runBotContextParser (parseTransition @t s) botCtx
     <|> parseSomeTransition' @s @ts s botCtx
 
 type IsState :: Type -> (Type -> Type) -> Constraint
@@ -93,16 +96,24 @@ type SomeState :: [(Type, [Type])] -> (Type -> Type) -> Type
 data SomeState fsa m where
   SomeState :: HasState s fsa m => s -> SomeState fsa m
 
-class IsTransition t s s' m | t s -> s' where
+class ParseTransition t s where
   parseTransition :: s -> BotContextParser t
-  handleTransition :: t -> s -> m s'
+
+class HandleTransition t s s' | t s -> s' where
+  handleTransition :: t -> s -> s'
+instance {-# OVERLAPPABLE #-} (HandleTransition t s s', Applicative m)
+      => HandleTransitionM t s s' m where
+  handleTransitionM t s = pure $ handleTransition t s
+
+class HandleTransitionM t s s' m | t s -> s' where
+  handleTransitionM :: t -> s -> m s'
 
 type SomeTransitionFrom :: Type -> [(Type, [Type])] -> (Type -> Type) -> Type
 data SomeTransitionFrom s fsa m where
   SomeTransition ::
     ( Applicative m
     , IsState s m
-    , IsTransition t s s' m
+    , HandleTransitionM t s s' m
     , IsState s' m
     , HasState s' fsa m
     ) => t -> SomeTransitionFrom s fsa m

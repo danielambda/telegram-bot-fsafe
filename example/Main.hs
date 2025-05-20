@@ -12,7 +12,7 @@ module Main (main) where
 import qualified Data.Text as T
 import Telegram.Bot.API as Tg (updateChatId)
 import Telegram.Bot.DSL
-  ( CallbackButtons, HasTaggedContext(..), UnitCallbackBtn, IsUnit(..), ReadShow(..)
+  ( CallbackButtons, UnitCallbackBtn, IsUnit(..), ReadShow(..)
   , IsCallbackData, andLet, VarShow, F
   , (:|:), (:\), AsMessage
   , TaggedContext(..), Tagged(..)
@@ -26,7 +26,7 @@ import Control.Applicative ((<|>))
 
 import Telegram.Bot.FSAfe.Start (getEnvToken, hoistStartKeyedBot_)
 import Telegram.Bot.FSAfe.BotContextParser (callbackQueryDataRead, command)
-import Telegram.Bot.FSAfe.FSA (IsTransition(..), MessageContext(..), IsState(..))
+import Telegram.Bot.FSAfe.FSA (HandleTransition(..), MessageContext(..), IsState(..), ParseTransition (..))
 
 tshow :: Show a => a -> T.Text
 tshow = T.pack . show
@@ -47,9 +47,6 @@ data PizzaContext
 data PizzaSize = ExtraSmall | Small | Medium | Large | ExtraLarge
   deriving stock (Show, Read, Eq, Enum, Bounded)
   deriving IsCallbackData via ReadShow PizzaSize
-
-instance HasTaggedContext '[ '("self", PizzaSize)] PizzaSize where
-  getTaggedContext = andLet @"self"
 
 data Topping = Cheese | Pepperoni | Mushrooms | Olives | Pineapples
   deriving stock (Show, Read, Eq, Enum, Bounded)
@@ -116,64 +113,63 @@ instance MonadReader PizzaContext m => IsState SelectingToppings m where
             else callbackButton (tshow s) (AddTopping s)
 
 data StartSelectingSize = StartSelectingSize
-instance Applicative m => IsTransition StartSelectingSize InitialState SelectingSize0 m where
+instance ParseTransition StartSelectingSize InitialState where
   parseTransition _ = StartSelectingSize <$ command "start"
-  handleTransition _ _ = pure SelectingSize0
+instance HandleTransition StartSelectingSize InitialState SelectingSize0 where
+  handleTransition _ _ = SelectingSize0
 
 newtype SelectSize = SelectSize { size :: PizzaSize }
   deriving stock (Show, Read, Generic)
   deriving IsCallbackData via ReadShow SelectSize
-instance Applicative m => IsTransition SelectSize SelectingSize0 SelectingSize m where
-  parseTransition _ = callbackQueryDataRead @SelectSize
-  handleTransition (SelectSize size) _ = pure $ SelectingSize size
-
-instance Applicative m => IsTransition SelectSize SelectingSize SelectingSize m where
-  parseTransition _ = callbackQueryDataRead @SelectSize
-  handleTransition (SelectSize size) _ = pure $ SelectingSize size
+instance ParseTransition SelectSize s where
+  parseTransition _ = callbackQueryDataRead
+instance HandleTransition SelectSize s SelectingSize where
+  handleTransition (SelectSize size) _ = SelectingSize size
 
 newtype AddTopping = AddTopping Topping
   deriving stock (Show, Read)
   deriving IsCallbackData via ReadShow AddTopping
-instance Applicative m => IsTransition AddTopping SelectingToppings SelectingToppings m where
-  parseTransition _ = callbackQueryDataRead @AddTopping
+instance ParseTransition AddTopping s where
+  parseTransition _ = callbackQueryDataRead
+instance HandleTransition AddTopping SelectingToppings SelectingToppings where
   handleTransition (AddTopping topping) SelectingToppings{toppings, ..} =
-    pure $ SelectingToppings{toppings = topping:toppings, ..}
+    SelectingToppings{toppings = topping:toppings, ..}
 
 newtype RemoveTopping = RemoveTopping Topping
   deriving stock (Show, Read)
   deriving IsCallbackData via ReadShow RemoveTopping
-instance Applicative m => IsTransition RemoveTopping SelectingToppings SelectingToppings m where
-  parseTransition _ = callbackQueryDataRead @RemoveTopping
+
+instance ParseTransition RemoveTopping s where
+  parseTransition _ = callbackQueryDataRead
+instance HandleTransition RemoveTopping SelectingToppings SelectingToppings where
   handleTransition (RemoveTopping topping) SelectingToppings{toppings, ..} =
-    pure $ SelectingToppings{toppings = filter (/= topping) toppings, ..}
+    SelectingToppings{toppings = filter (/= topping) toppings, ..}
 
 data Confirm = Confirm
   deriving stock (Show, Read, Generic)
   deriving anyclass IsUnit
   deriving IsCallbackData via ReadShow Confirm
-instance Applicative m => IsTransition Confirm SelectingSize SelectingToppings m where
-  parseTransition _
-    =   callbackQueryDataRead @Confirm
-    <|> Confirm <$ command "confirm"
-  handleTransition Confirm (SelectingSize size) =
-    pure $ SelectingToppings size []
 
-instance Applicative m => IsTransition Confirm SelectingToppings ConfirmingOrder m where
+instance ParseTransition Confirm s where
   parseTransition _
-    =   callbackQueryDataRead @Confirm
+    =   callbackQueryDataRead
     <|> Confirm <$ command "confirm"
-  handleTransition Confirm SelectingToppings{..} =
-    pure $ ConfirmingOrder PizzaOrder{..}
+instance HandleTransition Confirm SelectingSize SelectingToppings where
+  handleTransition Confirm (SelectingSize size) = SelectingToppings size []
 
-instance Applicative m => IsTransition Confirm ConfirmingOrder InitialState m where
-  parseTransition _
-    =   callbackQueryDataRead @Confirm
-    <|> Confirm <$ command "confirm"
-  handleTransition Confirm ConfirmingOrder{} =
-    pure InitialState
+instance HandleTransition Confirm SelectingToppings ConfirmingOrder where
+  handleTransition Confirm SelectingToppings{..} = ConfirmingOrder PizzaOrder{..}
+
+instance HandleTransition Confirm ConfirmingOrder InitialState where
+  handleTransition Confirm ConfirmingOrder{} = InitialState
 
 newtype AppM a = AppM { runAppM :: Reader PizzaContext a }
   deriving newtype (Functor, Applicative, Monad, MonadReader PizzaContext)
+
+data Id = Id
+instance ParseTransition Id a where parseTransition _ = pure Id
+instance HandleTransition Id a a where handleTransition _ = id
+-- instance Monad m => HandleTransition' Id a a m where handleTransition' _ = return
 
 type FSA =
  '[ '(InitialState, '[StartSelectingSize])
