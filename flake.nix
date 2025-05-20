@@ -1,39 +1,33 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    systems.url = "github:nix-systems/default";
-    flake-utils = {
-      url = "github:numtide/flake-utils";
-      inputs.systems.follows = "systems";
+    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+    flake-parts.url = "github:hercules-ci/flake-parts";
+    haskell-flake.url = "github:srid/haskell-flake";
+
+    telegram-bot-message-dsl = {
+      url = "github:danielambda/telegram-bot-message-dsl";
+      flake = false;
     };
   };
-  outputs = { nixpkgs, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
-        hPkgs = pkgs.haskell.packages.ghc984;
 
-        packages = [
-          pkgs.nixd
-
-          hPkgs.ghc
-          hPkgs.ghcid
-          hPkgs.haskell-language-server
-          pkgs.stack
-          hPkgs.cabal-install
-
-          pkgs.dhall-lsp-server
-          pkgs.zlib
-        ];
-      in {
-        devShells.default = pkgs.mkShell {
-          inherit packages;
-
-          shellHook = ''
-            set -a
-            source ./.env
-            set +a
-          '';
+  outputs = inputs@{ nixpkgs, flake-parts, ... }:
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = nixpkgs.lib.systems.flakeExposed;
+      imports = [inputs.haskell-flake.flakeModule];
+      perSystem = { self', config, pkgs, ... }: {
+        haskellProjects.default = {
+          autoWire = ["packages" "apps"];
+          packages = {
+            telegram-bot-message-dsl.source = inputs.telegram-bot-message-dsl;
+          };
         };
-      });
+
+        devShells.default = pkgs.mkShell {
+          inputsFrom = [config.haskellProjects.default.outputs.devShell];
+          packages = [pkgs.nixd];
+        };
+
+        packages.default = self'.packages.telegram-bot-fsafe;
+      };
+    };
 }
