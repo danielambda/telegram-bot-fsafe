@@ -13,7 +13,6 @@ module Telegram.Bot.FSAfe.Reply where
 
 import Data.Text (Text)
 import Telegram.Bot.API hiding (Message, editMessageText, editMessageReplyMarkup)
-import Telegram.Bot.DSL.Message (Message(..), textMessage)
 
 import Control.Applicative ((<|>))
 import Control.Monad (void, (<=<))
@@ -21,8 +20,9 @@ import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Reader (asks)
 import GHC.Generics (Generic)
 
-import Telegram.Bot.FSAfe.RunTG (runTG)
 import Telegram.Bot.FSAfe.BotM (BotContext(..), MonadBot (..))
+import Telegram.Bot.FSAfe.RunTG (runTG)
+import Telegram.Bot.FSAfe.Message (Message(..), textMessage)
 
 currentChatId :: MonadBot m => m (Maybe ChatId)
 currentChatId = liftBot $ asks $ updateChatId . botContextUpdate
@@ -59,6 +59,10 @@ toReplyMessage Message{..}
   Nothing messageLinkPreviewOptions
   Nothing Nothing Nothing
   Nothing messageReplyMarkup
+
+toEditMessage :: Message -> EditMessage
+toEditMessage Message{..}
+  = EditMessage messageText messageParseMode messageLinkPreviewOptions messageReplyMarkup
 
 replyMessageToSendMessageRequest :: SomeChatId -> ReplyMessage -> SendMessageRequest
 replyMessageToSendMessageRequest someChatId ReplyMessage{..} = SendMessageRequest
@@ -103,9 +107,6 @@ data EditMessageId
   = EditChatMessageId SomeChatId MessageId
   | EditInlineMessageId InlineMessageId
 
-toEditMessage :: Text -> EditMessage
-toEditMessage msg = EditMessage msg Nothing Nothing Nothing
-
 editMessageToEditMessageTextRequest
   :: EditMessageId -> EditMessage -> EditMessageTextRequest
 editMessageToEditMessageTextRequest editMessageId EditMessage{..}
@@ -134,6 +135,13 @@ editMessageToReplyMessage EditMessage{..} = (toReplyMessage $ textMessage editMe
   , replyMessageReplyMarkup = editMessageReplyMarkup
   }
 
+replyMessageToEditMessage :: ReplyMessage -> EditMessage
+replyMessageToEditMessage ReplyMessage{..} = (toEditMessage $ textMessage replyMessageText)
+  { editMessageParseMode = replyMessageParseMode
+  , editMessageLinkPreviewOptions = replyMessageLinkPreviewOptions
+  , editMessageReplyMarkup = replyMessageReplyMarkup
+  }
+
 editMessage :: MonadBot m => EditMessageId -> EditMessage -> m ()
 editMessage editMessageId emsg = do
   let msg = editMessageToEditMessageTextRequest editMessageId emsg
@@ -146,8 +154,12 @@ editUpdateMessage emsg = do
     Just editMessageId -> editMessage editMessageId emsg
     Nothing            -> liftIO $ putStrLn "Can't find message to edit!"
 
-editUpdateMessageText :: MonadBot m => Text -> m ()
-editUpdateMessageText = editUpdateMessage . toEditMessage
+editUpdateMessageOrReply :: MonadBot m => EditMessage -> m ()
+editUpdateMessageOrReply emsg = do
+  mEditMessageId <- getEditMessageId
+  case mEditMessageId of
+    Just editMessageId -> editMessage editMessageId emsg
+    Nothing            -> reply $ editMessageToReplyMessage emsg
 
 replyOrEdit :: MonadBot m => EditMessage -> m ()
 replyOrEdit emsg = do

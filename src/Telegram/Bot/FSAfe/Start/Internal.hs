@@ -8,6 +8,7 @@
 -}
 
 {-# LANGUAGE TypeAbstractions #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Telegram.Bot.FSAfe.Start.Internal
   ( tryAdvanceState
@@ -17,11 +18,10 @@ module Telegram.Bot.FSAfe.Start.Internal
 import Data.Aeson.Types (parseEither, FromJSON (parseJSON))
 import qualified Telegram.Bot.API as Tg
 import Servant.Client (ClientError, ClientM, runClientM)
-import Telegram.Bot.DSL (renderMessage, HasTaggedContext (getTaggedContext), (.++))
 
 import Control.Monad.Error.Class (catchError)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad (forever)
+import Control.Monad (forever, when)
 import Control.Monad.Reader (ask)
 import Control.Concurrent (threadDelay, killThread)
 import Control.Concurrent.Async (Async(asyncThreadId), async, link)
@@ -29,27 +29,29 @@ import Control.Concurrent.STM
   (atomically, newTVarIO, readTVarIO, writeTVar, newTQueueIO, readTQueue, writeTQueue)
 import Data.Either (partitionEithers)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
-import Data.Proxy (Proxy(..))
 
-import Telegram.Bot.FSAfe.Reply (reply, toReplyMessage)
-import Telegram.Bot.FSAfe.BotM (BotM)
+import Telegram.Bot.FSAfe.Reply (reply, toReplyMessage, toEditMessage, editUpdateMessageOrReply)
+import Telegram.Bot.FSAfe.BotM (BotM, answerCallbackQuery)
 import Telegram.Bot.FSAfe.FSA
   ( SomeTransitionFrom(..), SomeState(..)
-  , IsState (..), MessageContext (..), parseSomeTransition, HandleTransitionM(..)
+  , parseSomeTransition, HandleTransitionM(..), IsStateM (..)
   )
+import Telegram.Bot.FSAfe.Message (MessageShowMode(..))
 
-tryAdvanceState :: forall fsa m. (forall x. m x -> BotM x) -> SomeState fsa m -> BotM (SomeState fsa m)
-tryAdvanceState nt (SomeState @s @_ @ts s) = do
+tryAdvanceState :: forall fsa m.
+  (forall x. m x -> BotM x) -> SomeState fsa m -> BotM (SomeState fsa m)
+tryAdvanceState nt (SomeState s) = do
   botCtx <- ask
-  case parseSomeTransition @s @fsa @m s botCtx of
+  case parseSomeTransition @_ @fsa @m s botCtx of
     Nothing -> pure $ SomeState s
-    Just (SomeTransition t) -> do
-      (s' :: s') <- nt $ handleTransitionM t s
-      MessageContext extractedCtx <- nt $ extractMessageContext s'
-      let stateCtx = getTaggedContext s'
-      let ctx = extractedCtx .++ stateCtx
-      let msg = renderMessage (Proxy @(StateMessage s')) ctx
-      reply $ toReplyMessage msg
+    Just (SomeTransition @_ @s @t @s' t) -> do
+      when (automaticallyHandleCallbackQueries @t @s @s' @m)
+        answerCallbackQuery
+      s' <- nt $ handleTransitionM t s
+      nt (stateMessageM s') >>= \case
+        NoMessage -> pure ()
+        Send msg -> reply $ toReplyMessage msg
+        Edit msg -> editUpdateMessageOrReply $ toEditMessage msg
       return $ SomeState s'
 
 startBotGeneric

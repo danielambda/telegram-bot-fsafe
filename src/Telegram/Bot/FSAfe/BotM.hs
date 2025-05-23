@@ -11,24 +11,34 @@ module Telegram.Bot.FSAfe.BotM
   ( BotM, BotContext(..)
   , liftClientM, runBotM
   , MonadBot(..)
+  , answerCallbackQuery
   ) where
 
-import qualified Telegram.Bot.API as Tg (User, Update)
-import Control.Monad.Reader (ReaderT (..), MonadReader, MonadTrans (lift))
+import qualified Telegram.Bot.API as Tg
+  (User, Update, answerCallbackQuery, Update(..), defAnswerCallbackQuery, CallbackQuery(..))
 import Servant.Client (ClientM)
-import Control.Monad.IO.Class (MonadIO)
+
 import Control.Monad.Except (ExceptT, runExceptT, MonadError (throwError))
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Reader (ReaderT(..), MonadReader, MonadTrans (lift), asks)
+import Data.Foldable (traverse_)
 
 -- I know i could've imported MaybeT
 newtype BotM a = BotM (ReaderT BotContext (ExceptT () ClientM) a)
   deriving (Functor, Applicative, Monad, MonadReader BotContext, MonadError (), MonadIO)
 
+answerCallbackQuery :: BotM ()
+answerCallbackQuery =
+  asks (Tg.updateCallbackQuery . botContextUpdate) >>= traverse_
+    (liftClientM . Tg.answerCallbackQuery . Tg.defAnswerCallbackQuery . Tg.callbackQueryId)
+  -- ^ runTG .                            ^
+
 instance MonadFail BotM where
   fail _ = throwError ()
 
 data BotContext = BotContext
-  { botContextUser   :: Tg.User
-  , botContextUpdate :: Tg.Update
+  { botContextUser      :: Tg.User
+  , botContextUpdate    :: Tg.Update
   }
 
 runBotM :: BotM a -> BotContext -> ClientM (Maybe a)
