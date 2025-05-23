@@ -7,7 +7,6 @@
   All rights reserved.
 -}
 
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeAbstractions #-}
 
 module Telegram.Bot.FSAfe.Start.Internal
@@ -46,12 +45,11 @@ tryAdvanceState nt (SomeState @s @_ @ts s) = do
     Nothing -> pure $ SomeState s
     Just (SomeTransition t) -> do
       (s' :: s') <- nt $ handleTransitionM t s
-      nt (extractMessageContext s') >>= \case
-        MessageContext extractedCtx -> do
-          let stateCtx = getTaggedContext s'
-          let ctx = extractedCtx .++ stateCtx
-          let msg = renderMessage (Proxy @(StateMessage s')) ctx
-          reply $ toReplyMessage msg
+      MessageContext extractedCtx <- nt $ extractMessageContext s'
+      let stateCtx = getTaggedContext s'
+      let ctx = extractedCtx .++ stateCtx
+      let msg = renderMessage (Proxy @(StateMessage s')) ctx
+      reply $ toReplyMessage msg
       return $ SomeState s'
 
 startBotGeneric
