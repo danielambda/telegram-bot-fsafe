@@ -1,15 +1,12 @@
-{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE DeriveAnyClass #-}
 
 module Telegram.Bot.FSAfe.FSA
-  ( IsState(..), SomeState(..)
+  ( IsState(..), IsStateM(..), SomeState(..)
   , SomeTransitionFrom(..)
-  , MessageContext(..)
   , HasState(..)
   , ParseTransition(..), ParseTransitionFrom(..)
   , HandleTransition(..), HandleTransitionM(..)
@@ -21,8 +18,8 @@ module Telegram.Bot.FSAfe.FSA
 
 import Data.Kind (Type, Constraint)
 
-import Telegram.Bot.DSL (IsMessage, MessageKind, Proper', HasTaggedContext (..), type (++), IsCallbackData, ReadShow(..), IsUnit (..))
-import Telegram.Bot.DSL.TaggedContext  (TaggedContext (..))
+import Telegram.Bot.DSL (IsCallbackData, IsUnit (..))
+import Telegram.Bot.FSAfe.Message (MessageShowMode)
 
 import Control.Applicative ((<|>))
 
@@ -37,7 +34,6 @@ import Data.Proxy (Proxy(..))
 import Data.String (IsString (..))
 import Data.Coerce (coerce)
 import Control.Monad.Reader (ReaderT(..))
-import GHC.Generics (Generic)
 
 type Extract :: Type -> [(Type, k)] -> Maybe k
 type family Extract s fsa where
@@ -75,10 +71,10 @@ instance HasState' s '[] fsa m where
   parseSomeTransition' _ _ = Nothing
 
 instance ( Applicative m
-         , IsState s m
+         , IsStateM m s
          , ParseTransitionFrom s t
          , HandleTransitionM t s s' m
-         , IsState s' m
+         , IsStateM m s'
          , HasState s' fsa m
          , HasState' s ts fsa m
          )
@@ -87,25 +83,15 @@ instance ( Applicative m
     =   SomeTransition <$> runBotContextParser (parseTransitionFrom @s @t s) botCtx
     <|> parseSomeTransition' @s @ts s botCtx
 
-type IsState :: Type -> (Type -> Type) -> Constraint
-class IsState a m where
-  type StateMessage a :: MessageKind
+class IsStateM m a where
+  stateMessageM :: a -> m MessageShowMode
 
-  extractMessageContext :: Applicative m => a -> m (MessageContext a)
-  default extractMessageContext ::
-    ( Applicative m
-    , IsMessage (Proper' (StateMessage a)) ctx
-    , HasTaggedContext ctx a
-    ) => a -> m (MessageContext a)
-  extractMessageContext _ = pure $ MessageContext EmptyTaggedContext
+instance {-# OVERLAPPABLE #-}
+         (Applicative m, IsState a) => IsStateM m a where
+  stateMessageM = pure . stateMessage
 
-type MessageContext :: k -> Type
-data MessageContext a where
-  MessageContext ::
-    ( IsMessage (Proper' (StateMessage a)) ctx
-    , HasTaggedContext ctx0 a
-    , ctx ~ ctx1 ++ ctx0
-    ) => TaggedContext ctx1 -> MessageContext a
+class IsState a where
+  stateMessage :: a -> MessageShowMode
 
 type SomeState :: [(Type, [Type])] -> (Type -> Type) -> Type
 data SomeState fsa m where
@@ -113,17 +99,16 @@ data SomeState fsa m where
 
 class ParseTransition t where
   parseTransition :: BotContextParser t
-instance {-# OVERLAPPABLE #-} ParseTransition t
-      => ParseTransitionFrom s t where
+
+instance {-# OVERLAPPABLE #-} ParseTransition t => ParseTransitionFrom s t where
   parseTransitionFrom _ = parseTransition
 
 class ParseTransitionFrom s t where
   parseTransitionFrom :: s -> BotContextParser t
 
 type Command :: Symbol -> Type
-type Command cmd = Command' cmd T.Text
-pattern Command :: T.Text -> Command cmd
-pattern Command t = Command' t
+newtype Command cmd = Command T.Text
+  deriving ParseTransition via Command' cmd T.Text
 
 type Command' :: Symbol -> Type -> Type
 newtype Command' cmd t = Command' t
@@ -157,11 +142,6 @@ newtype CallbackQueryData a = CallbackQueryData a
 instance IsCallbackData a => ParseTransition (CallbackQueryData a) where
   parseTransition = CallbackQueryData <$> callbackQueryDataRead
 
-data Confirm = Confirm
-  deriving (Read, Show, Generic, IsUnit)
-  deriving IsCallbackData via ReadShow Confirm
-  deriving ParseTransition via (CommandUnit "confirm" `Or` CallbackQueryData) Confirm
-
 type Or :: k -> l -> Type -> Type
 newtype Or a b c = Or c
 instance ( Coercible (a c) c, Coercible (b c) c
@@ -191,20 +171,24 @@ instance ( Coercible (a c) c, Coercible b c
 
 class HandleTransition t s s' | t s -> s' where
   handleTransition :: t -> s -> s'
-instance {-# OVERLAPPABLE #-} (HandleTransition t s s', Applicative m)
-      => HandleTransitionM t s s' m where
+
+instance {-# OVERLAPPABLE #-}
+         (HandleTransition t s s', Applicative m) => HandleTransitionM t s s' m where
   handleTransitionM t s = pure $ handleTransition t s
+  automaticallyHandleCallbackQueries = True
 
 class HandleTransitionM t s s' m | t s -> s' where
   handleTransitionM :: t -> s -> m s'
+  automaticallyHandleCallbackQueries :: Bool
+  automaticallyHandleCallbackQueries = False
 
 type SomeTransitionFrom :: Type -> [(Type, [Type])] -> (Type -> Type) -> Type
 data SomeTransitionFrom s fsa m where
   SomeTransition ::
     ( Applicative m
-    , IsState s m
+    , IsStateM m s
     , HandleTransitionM t s s' m
-    , IsState s' m
+    , IsStateM m s'
     , HasState s' fsa m
     ) => t -> SomeTransitionFrom s fsa m
 

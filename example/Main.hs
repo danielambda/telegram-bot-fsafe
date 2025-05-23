@@ -10,13 +10,11 @@
 module Main (main) where
 
 import qualified Data.Text as T
-import Telegram.Bot.API as Tg (updateChatId)
+import Telegram.Bot.API as Tg (updateChatId, InlineKeyboardMarkup (..), SomeReplyMarkup (SomeInlineKeyboardMarkup))
 import Telegram.Bot.DSL
-  ( CallbackButtons, UnitCallbackBtn, IsUnit(..), ReadShow(..)
-  , IsCallbackData, andLet, VarShow, F
-  , (:\), AsMessage
-  , TaggedContext(..), Tagged(..)
-  , callbackButton, Buttons
+  ( IsUnit(..), ReadShow(..)
+  , IsCallbackData
+  , callbackButton
   )
 
 import GHC.Generics (Generic)
@@ -24,9 +22,10 @@ import Data.Proxy (Proxy(..))
 import Control.Monad.Reader (ReaderT(..), Reader, runReader, MonadReader (..), asks)
 
 import Telegram.Bot.FSAfe.Start (getEnvToken, hoistStartKeyedBot_)
+import Telegram.Bot.FSAfe.Message (Message(..), textMessage, MessageShowMode(..))
 import Telegram.Bot.FSAfe.FSA
-  ( HandleTransition(..), MessageContext(..), IsState(..)
-  , ParseTransition, CallbackQueryData(..), CommandUnit(..), Or(..)
+  ( HandleTransition(..), IsState(..)
+  , ParseTransition, CallbackQueryData(..), CommandUnit(..), Or(..), IsStateM (..)
   )
 
 tshow :: Show a => a -> T.Text
@@ -55,63 +54,51 @@ data Topping = Cheese | Pepperoni | Mushrooms | Olives | Pineapples
 allValues :: (Enum a, Bounded a) => [a]
 allValues = [minBound..maxBound]
 
-data InitialState = InitialState deriving stock Generic
-instance Monad m => IsState InitialState m where
-  type StateMessage InitialState = AsMessage "Try /start"
+data InitialState = InitialState
+instance IsState InitialState where
+  stateMessage InitialState = Send $
+    textMessage "Try /start"
 
 newtype ConfirmingOrder = ConfirmingOrder
   { pizza :: PizzaOrder }
-  deriving stock Generic
-instance Monad m => IsState ConfirmingOrder m where
-  type StateMessage ConfirmingOrder
-    =  VarShow "pizza"
-    :\ UnitCallbackBtn "Confirm" Confirm
+instance IsState ConfirmingOrder where
+  stateMessage ConfirmingOrder{..} = Edit $
+    (textMessage $ tshow pizza)
+      { messageReplyMarkup = Just $ SomeInlineKeyboardMarkup $ InlineKeyboardMarkup
+        [[callbackButton "Confirm" Confirm]] }
 
 data SelectingSize0 = SelectingSize0
-  deriving stock Generic
-instance MonadReader PizzaContext m => IsState SelectingSize0 m where
-  type StateMessage SelectingSize0
-    =  AsMessage "Please, select size of your pizza:"
-    :\ CallbackButtons (VarShow "size") SelectSize "pizzaSizes"
-
-  extractMessageContext _ = do
+instance MonadReader PizzaContext m => IsStateM m SelectingSize0 where
+  stateMessageM SelectingSize0 = Send <$> do
     availableSizes <- asks availableSizes
-    return $ MessageContext
-      $  Tagged @"pizzaSizes" (SelectSize <$> availableSizes)
-      :. EmptyTaggedContext
+    pure $ (textMessage "Please, select size of your pizza:")
+      { messageReplyMarkup = Just $ SomeInlineKeyboardMarkup $ InlineKeyboardMarkup
+        [(\size -> callbackButton (tshow size) (SelectSize size)) <$> availableSizes] }
 
 newtype SelectingSize = SelectingSize
   { selectedSize :: PizzaSize }
-  deriving stock Generic
-instance MonadReader PizzaContext m => IsState SelectingSize m where
-  type StateMessage SelectingSize
-    =  F"You selected {show selectedSize} size"
-    -- :\  "You selected " :|: VarShow "selectedSize" :|: " size"
-    :\ CallbackButtons (VarShow "size") SelectSize "pizzaSizes"
-    :\ UnitCallbackBtn "Confirm" Confirm
-
-  extractMessageContext (SelectingSize selectedSize) = do
+instance MonadReader PizzaContext m => IsStateM m SelectingSize where
+  stateMessageM SelectingSize{..} = Edit <$> do
     availableSizes <- asks availableSizes
-    return $ MessageContext
-      $ andLet @"pizzaSizes" (SelectSize <$> filter (/= selectedSize) availableSizes)
+    pure $ (textMessage $ "You selected " <> tshow selectedSize <> " size")
+      {messageReplyMarkup = Just $ SomeInlineKeyboardMarkup $ InlineKeyboardMarkup $
+       ((\size -> callbackButton (tshow size) (SelectSize size)) <$> filter (/= selectedSize) availableSizes)
+       : [[callbackButton "Confirm" Confirm]] }
 
 data SelectingToppings = SelectingToppings
   { size :: PizzaSize
   , toppings :: [Topping]
-  } deriving stock Generic
-instance MonadReader PizzaContext m => IsState SelectingToppings m where
-  type StateMessage SelectingToppings
-    =  "Please, select toppings for your pizza:"
-    :\ Buttons "toppingButtons"
-    :\ UnitCallbackBtn "Confirm" Confirm
-
-  extractMessageContext SelectingToppings{toppings} = do
+  }
+instance MonadReader PizzaContext m => IsStateM m SelectingToppings where
+  stateMessageM SelectingToppings{..} = Edit <$> do
     availableToppings <- asks availableToppings
-    return $ MessageContext
-      $ andLet @"toppingButtons" (f <$> availableToppings)
-    where f s = if s `elem` toppings
-            then callbackButton ("✓" <> tshow s) (RemoveTopping s)
-            else callbackButton (tshow s) (AddTopping s)
+    pure $ (textMessage "Please, select toppings for your pizza:")
+      {messageReplyMarkup = Just $ SomeInlineKeyboardMarkup $ InlineKeyboardMarkup
+        [f <$> availableToppings, [callbackButton "Confirm" Confirm]]}
+      where
+        f s = if s `elem` toppings
+          then callbackButton ("✓" <> tshow s) (RemoveTopping s)
+          else callbackButton (tshow s) (AddTopping s)
 
 data StartSelectingSize = StartSelectingSize
   deriving (Generic, IsUnit)
@@ -120,7 +107,7 @@ instance HandleTransition StartSelectingSize InitialState SelectingSize0 where
   handleTransition _ _ = SelectingSize0
 
 newtype SelectSize = SelectSize { size :: PizzaSize }
-  deriving stock (Show, Read, Generic)
+  deriving stock (Show, Read)
   deriving IsCallbackData via ReadShow SelectSize
   deriving ParseTransition via CallbackQueryData SelectSize
 instance HandleTransition SelectSize s SelectingSize where
