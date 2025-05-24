@@ -13,13 +13,13 @@ module Telegram.Bot.FSAfe.BotM
   , MonadBot(..)
   ) where
 
+import Servant.Client (ClientM)
 import qualified Telegram.Bot.API as Tg
   (User, Update, Update(..))
-import Servant.Client (ClientM)
 
-import Control.Monad.Except (ExceptT, runExceptT, MonadError (throwError))
+import Control.Monad.Except (ExceptT, runExceptT, MonadError(..))
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Reader (ReaderT(..), MonadReader, MonadTrans (lift))
+import Control.Monad.Reader (ReaderT(..), MonadReader, MonadTrans(..))
 
 -- I know i could've imported MaybeT
 newtype BotM a = BotM (ReaderT BotContext (ExceptT () ClientM) a)

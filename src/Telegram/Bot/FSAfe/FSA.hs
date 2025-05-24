@@ -2,10 +2,15 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
 module Telegram.Bot.FSAfe.FSA
-  ( SomeState(..)
+  ( module Exports
+  , SomeState(..)
   , SomeTransitionFrom(..)
   , HasState(..)
   ) where
+
+import Telegram.Bot.FSAfe.FSA.HandleTransition as Exports
+import Telegram.Bot.FSAfe.FSA.StateMessage as Exports
+import Telegram.Bot.FSAfe.FSA.ParseTransition as Exports
 
 import Data.Kind (Type, Constraint)
 
@@ -16,10 +21,6 @@ import Telegram.Bot.FSAfe.BotContextParser (runBotContextParser)
 import GHC.TypeError (TypeError, ErrorMessage(..))
 import Data.Type.Bool (If)
 
-import Telegram.Bot.FSAfe.FSA.HandleTransition (HandleTransitionM)
-import Telegram.Bot.FSAfe.FSA.ParseTransition (ParseTransitionFrom(..))
-import Telegram.Bot.FSAfe.FSA.StateMessage (StateMessageM)
-
 type HasState :: Type -> [(Type, [Type])] -> (Type -> Type) -> Constraint
 class HasState s fsa m where
   parseSomeTransition :: s -> BotContext -> Maybe (SomeTransitionFrom s fsa m)
@@ -28,7 +29,7 @@ instance ( HasState' s ts fsa m
          , If (IsJust (Extract s fsa))
             ('Just ts ~ Extract s fsa)
             (TypeError
-              ( ShowType fsa
+              (    ShowType fsa
               :<>: Text " does not specify transitions for state "
               :<>: ShowType s
               )

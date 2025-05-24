@@ -17,8 +17,8 @@ library
       Telegram.Bot.FSAfe.Message
       Telegram.Bot.FSAfe.Message.ReplyMarkup
       Telegram.Bot.FSAfe.Message.ReplyMarkup.IsCallbackQuery
-      Telegram.Bot.FSAfe.Reply
       Telegram.Bot.FSAfe.RunTG
+      Telegram.Bot.FSAfe.SendMessage
       Telegram.Bot.FSAfe.Start
       Telegram.Bot.FSAfe.Start.Internal
       Telegram.Bot.FSAfe.Utils

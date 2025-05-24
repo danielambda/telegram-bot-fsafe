@@ -1,4 +1,10 @@
-module Telegram.Bot.FSAfe.Message.ReplyMarkup where
+module Telegram.Bot.FSAfe.Message.ReplyMarkup
+  ( module Exports
+  , IsInlineKeyboardMarkup(..)
+  , single, col, row, grid
+  ) where
+
+import Telegram.Bot.FSAfe.Message.ReplyMarkup.IsCallbackQuery as Exports
 
 import Telegram.Bot.API (InlineKeyboardButton, InlineKeyboardMarkup (..))
 

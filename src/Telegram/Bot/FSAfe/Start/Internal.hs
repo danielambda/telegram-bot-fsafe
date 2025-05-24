@@ -30,12 +30,12 @@ import Control.Concurrent.STM
 import Data.Either (partitionEithers)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 
-import Telegram.Bot.FSAfe.Reply (reply, toReplyMessage, toEditMessage, editUpdateMessageOrReply, answerCallbackQuery)
 import Telegram.Bot.FSAfe.BotM (BotM)
-import Telegram.Bot.FSAfe.FSA (SomeTransitionFrom(..), SomeState(..), parseSomeTransition)
 import Telegram.Bot.FSAfe.FSA.HandleTransition (HandleTransitionM(..))
+import Telegram.Bot.FSAfe.FSA (SomeTransitionFrom(..), SomeState(..), parseSomeTransition)
 import Telegram.Bot.FSAfe.FSA.StateMessage (StateMessageM(..))
-import Telegram.Bot.FSAfe.Message (MessageShowMode(..))
+import Telegram.Bot.FSAfe.Message (ShowMode(..))
+import Telegram.Bot.FSAfe.SendMessage (send_, answerCallbackQuery)
 
 tryAdvanceState :: forall fsa m.
   (forall x. m x -> BotM x) -> SomeState fsa m -> BotM (SomeState fsa m)
@@ -49,8 +49,8 @@ tryAdvanceState nt (SomeState s) = do
       s' <- nt $ handleTransitionM t s
       nt (stateMessageM s') >>= \case
         NoMessage -> pure ()
-        Send msg -> reply $ toReplyMessage msg
-        Edit msg -> editUpdateMessageOrReply $ toEditMessage msg
+        Send msg -> send_ msg
+        Edit msg -> send_ msg -- TODO
       return $ SomeState s'
 
 startBotGeneric

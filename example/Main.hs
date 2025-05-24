@@ -4,7 +4,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Main (main) where
@@ -17,17 +16,17 @@ import Data.Function ((&))
 import Data.Proxy (Proxy(..))
 import Control.Monad.Reader (ReaderT(..), Reader, runReader, MonadReader (..), asks)
 
-import Telegram.Bot.FSAfe.Start (getEnvToken, hoistStartKeyedBot_)
-import Telegram.Bot.FSAfe.Message (textMessage, MessageShowMode(..), withInlineKeyboard)
-import Telegram.Bot.FSAfe.Message.ReplyMarkup (row, single)
-import Telegram.Bot.FSAfe.Message.ReplyMarkup.IsCallbackQuery
-  (IsCallbackQuery(..), callbackButton)
-import Telegram.Bot.FSAfe.FSA.StateMessage (StateMessage(..), StateMessageM(..))
-import Telegram.Bot.FSAfe.FSA.ParseTransition
-  (ParseTransition, CallbackQueryData(..), CommandUnit(..), Or(..))
-import Telegram.Bot.FSAfe.FSA.HandleTransition (HandleTransition(..))
-import Telegram.Bot.FSAfe.Utils (ReadShow(..), IsUnit)
-
+-- import Telegram.Bot.FSAfe.Start (getEnvToken, hoistStartKeyedBot_)
+-- import Telegram.Bot.FSAfe.Message (textMessage, ShowMode(..), withInlineKeyboard)
+-- import Telegram.Bot.FSAfe.Message.ReplyMarkup (row, single)
+-- import Telegram.Bot.FSAfe.Message.ReplyMarkup.IsCallbackQuery
+--   (IsCallbackQuery(..), callbackButton)
+-- import Telegram.Bot.FSAfe.FSA.StateMessage (StateMessage(..), StateMessageM(..))
+-- import Telegram.Bot.FSAfe.FSA.ParseTransition
+--   (ParseTransition, CallbackQueryData(..), CommandUnit(..), Or(..))
+-- import Telegram.Bot.FSAfe.FSA.HandleTransition (HandleTransition(..))
+-- import Telegram.Bot.FSAfe.Utils (ReadShow(..), IsUnit)
+import Telegram.Bot.FSAfe
 tshow :: Show a => a -> T.Text
 tshow = T.pack . show
 
@@ -56,7 +55,7 @@ allValues = [minBound..maxBound]
 data InitialState = InitialState
 instance StateMessage InitialState where
   stateMessage InitialState = Send $
-    textMessage "Try /start"
+    textMessage "You can make a new /order"
 
 newtype ConfirmingOrder = ConfirmingOrder
   { pizza :: PizzaOrder }
@@ -67,7 +66,7 @@ instance StateMessage ConfirmingOrder where
 
 data SelectingSize0 = SelectingSize0
 instance MonadReader PizzaContext m => StateMessageM m SelectingSize0 where
-  stateMessageM SelectingSize0 = Send <$> do
+  stateMessageM SelectingSize0 = Edit <$> do
     availableSizes <- asks availableSizes
     return $
       textMessage "Please, select size of your pizza:"
@@ -108,10 +107,16 @@ instance MonadReader PizzaContext m => StateMessageM m SelectingToppings where
         then callbackButton ("✓" <> tshow topping) (RemoveTopping topping)
         else callbackButton (       tshow topping) (AddTopping topping)
 
-data StartSelectingSize = StartSelectingSize
+data Start = Start
   deriving (Generic, IsUnit)
-  deriving ParseTransition via CommandUnit "start" StartSelectingSize
-instance HandleTransition StartSelectingSize InitialState SelectingSize0 where
+  deriving ParseTransition via CommandUnit "start" Start
+instance HandleTransition Start InitialState InitialState where
+  handleTransition _ _ = InitialState
+
+data BeginOrder = BeginOrder
+  deriving (Generic, IsUnit)
+  deriving ParseTransition via CommandUnit "order" BeginOrder
+instance HandleTransition BeginOrder InitialState SelectingSize0 where
   handleTransition _ _ = SelectingSize0
 
 newtype SelectSize = SelectSize { size :: PizzaSize }
@@ -158,7 +163,7 @@ newtype AppM a = AppM { runAppM :: Reader PizzaContext a }
   deriving newtype (Functor, Applicative, Monad, MonadReader PizzaContext)
 
 type FSA =
- '[ '(InitialState, '[StartSelectingSize])
+ '[ '(InitialState, '[Start, BeginOrder])
   , '(SelectingSize0, '[SelectSize])
   , '(SelectingSize, '[SelectSize, Confirm])
   , '(SelectingToppings, '[AddTopping, RemoveTopping, Confirm])
