@@ -26,7 +26,7 @@ import Control.Monad.Reader (ReaderT(..), asks)
 import Data.Char (isSpace)
 
 import Telegram.Bot.FSAfe.BotM (BotContext (..))
-import Telegram.Bot.DSL (IsCallbackData (fromCallbackData))
+import Telegram.Bot.FSAfe.Message.ReplyMarkup.IsCallbackQuery (IsCallbackQuery(..))
 
 type BotContextParser a = ReaderT BotContext Maybe a
 
@@ -60,9 +60,9 @@ command commandName = do
     else fail "not that command"
 
 -- | Obtain 'CallbackQuery' @data@ associated with the callback button in an inline keyboard if present in 'Update' message.
-callbackQueryDataRead :: IsCallbackData a => BotContextParser a
+callbackQueryDataRead :: IsCallbackQuery a => BotContextParser a
 callbackQueryDataRead = mkBotContextParser
-  $   fromCallbackData
+  $   fromCallbackQueryData
   <=< callbackQueryData
   <=< updateCallbackQuery
   .   botContextUpdate

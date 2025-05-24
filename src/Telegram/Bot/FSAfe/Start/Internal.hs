@@ -30,12 +30,11 @@ import Control.Concurrent.STM
 import Data.Either (partitionEithers)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 
-import Telegram.Bot.FSAfe.Reply (reply, toReplyMessage, toEditMessage, editUpdateMessageOrReply)
-import Telegram.Bot.FSAfe.BotM (BotM, answerCallbackQuery)
-import Telegram.Bot.FSAfe.FSA
-  ( SomeTransitionFrom(..), SomeState(..)
-  , parseSomeTransition, HandleTransitionM(..), IsStateM (..)
-  )
+import Telegram.Bot.FSAfe.Reply (reply, toReplyMessage, toEditMessage, editUpdateMessageOrReply, answerCallbackQuery)
+import Telegram.Bot.FSAfe.BotM (BotM)
+import Telegram.Bot.FSAfe.FSA (SomeTransitionFrom(..), SomeState(..), parseSomeTransition)
+import Telegram.Bot.FSAfe.FSA.HandleTransition (HandleTransitionM(..))
+import Telegram.Bot.FSAfe.FSA.StateMessage (StateMessageM(..))
 import Telegram.Bot.FSAfe.Message (MessageShowMode(..))
 
 tryAdvanceState :: forall fsa m.

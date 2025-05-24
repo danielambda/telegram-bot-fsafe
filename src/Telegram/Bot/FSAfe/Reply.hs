@@ -18,11 +18,17 @@ import Control.Applicative ((<|>))
 import Control.Monad (void, (<=<))
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Reader (asks)
+import Data.Foldable (traverse_)
 import GHC.Generics (Generic)
 
 import Telegram.Bot.FSAfe.BotM (BotContext(..), MonadBot (..))
 import Telegram.Bot.FSAfe.RunTG (runTG)
 import Telegram.Bot.FSAfe.Message (Message(..), textMessage)
+
+answerCallbackQuery :: MonadBot m => m ()
+answerCallbackQuery = liftBot $
+  asks (updateCallbackQuery . botContextUpdate) >>= traverse_
+    (runTG . defAnswerCallbackQuery . callbackQueryId)
 
 currentChatId :: MonadBot m => m (Maybe ChatId)
 currentChatId = liftBot $ asks $ updateChatId . botContextUpdate

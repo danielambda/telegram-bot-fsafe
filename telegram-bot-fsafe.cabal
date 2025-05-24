@@ -11,7 +11,12 @@ library
       Telegram.Bot.FSAfe.BotContextParser
       Telegram.Bot.FSAfe.BotM
       Telegram.Bot.FSAfe.FSA
+      Telegram.Bot.FSAfe.FSA.HandleTransition
+      Telegram.Bot.FSAfe.FSA.ParseTransition
+      Telegram.Bot.FSAfe.FSA.StateMessage
       Telegram.Bot.FSAfe.Message
+      Telegram.Bot.FSAfe.Message.ReplyMarkup
+      Telegram.Bot.FSAfe.Message.ReplyMarkup.IsCallbackQuery
       Telegram.Bot.FSAfe.Reply
       Telegram.Bot.FSAfe.RunTG
       Telegram.Bot.FSAfe.Start

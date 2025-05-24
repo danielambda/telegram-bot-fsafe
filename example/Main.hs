@@ -11,24 +11,22 @@ module Main (main) where
 
 import qualified Data.Text as T
 import Telegram.Bot.API as Tg (updateChatId, InlineKeyboardButton)
-import Telegram.Bot.DSL
-  ( IsUnit(..), ReadShow(..)
-  , IsCallbackData
-  , callbackButton
-  )
+import Telegram.Bot.DSL (IsUnit(..))
 
 import GHC.Generics (Generic)
+import Data.Function ((&))
 import Data.Proxy (Proxy(..))
 import Control.Monad.Reader (ReaderT(..), Reader, runReader, MonadReader (..), asks)
 
 import Telegram.Bot.FSAfe.Start (getEnvToken, hoistStartKeyedBot_)
-import Telegram.Bot.FSAfe.Message
-  (textMessage, MessageShowMode(..), withInlineKeyboard, row, single)
-import Telegram.Bot.FSAfe.FSA
-  ( HandleTransition(..), IsState(..)
-  , ParseTransition, CallbackQueryData(..), CommandUnit(..), Or(..), IsStateM (..)
-  )
-import Data.Function ((&))
+import Telegram.Bot.FSAfe.Message (textMessage, MessageShowMode(..), withInlineKeyboard)
+import Telegram.Bot.FSAfe.Message.ReplyMarkup (row, single)
+import Telegram.Bot.FSAfe.Message.ReplyMarkup.IsCallbackQuery
+  (IsCallbackQuery(..), ReadShow(..), callbackButton)
+import Telegram.Bot.FSAfe.FSA.StateMessage (StateMessage(..), StateMessageM(..))
+import Telegram.Bot.FSAfe.FSA.ParseTransition
+  (ParseTransition, CallbackQueryData(..), CommandUnit(..), Or(..))
+import Telegram.Bot.FSAfe.FSA.HandleTransition (HandleTransition(..))
 
 tshow :: Show a => a -> T.Text
 tshow = T.pack . show
@@ -37,8 +35,7 @@ data PizzaOrder
   = PizzaOrder
   { size :: PizzaSize
   , toppings :: [Topping]
-  } deriving stock (Read, Show)
-    deriving IsCallbackData via ReadShow PizzaOrder
+  } deriving (Show)
 
 data PizzaContext
   = PizzaContext
@@ -47,29 +44,29 @@ data PizzaContext
   }
 
 data PizzaSize = ExtraSmall | Small | Medium | Large | ExtraLarge
-  deriving stock (Show, Read, Eq, Enum, Bounded)
-  deriving IsCallbackData via ReadShow PizzaSize
+  deriving (Show, Read, Eq, Enum, Bounded)
+  deriving IsCallbackQuery via ReadShow PizzaSize
 
 data Topping = Cheese | Pepperoni | Mushrooms | Olives | Pineapples
-  deriving stock (Show, Read, Eq, Enum, Bounded)
+  deriving (Show, Read, Eq, Enum, Bounded)
 
 allValues :: (Enum a, Bounded a) => [a]
 allValues = [minBound..maxBound]
 
 data InitialState = InitialState
-instance IsState InitialState where
+instance StateMessage InitialState where
   stateMessage InitialState = Send $
     textMessage "Try /start"
 
 newtype ConfirmingOrder = ConfirmingOrder
   { pizza :: PizzaOrder }
-instance IsState ConfirmingOrder where
+instance StateMessage ConfirmingOrder where
   stateMessage ConfirmingOrder{..} = Edit $
     textMessage (tshow pizza)
     & withInlineKeyboard (single confirmButton)
 
 data SelectingSize0 = SelectingSize0
-instance MonadReader PizzaContext m => IsStateM m SelectingSize0 where
+instance MonadReader PizzaContext m => StateMessageM m SelectingSize0 where
   stateMessageM SelectingSize0 = Send <$> do
     availableSizes <- asks availableSizes
     return $
@@ -81,7 +78,7 @@ instance MonadReader PizzaContext m => IsStateM m SelectingSize0 where
 
 newtype SelectingSize = SelectingSize
   { selectedSize :: PizzaSize }
-instance MonadReader PizzaContext m => IsStateM m SelectingSize where
+instance MonadReader PizzaContext m => StateMessageM m SelectingSize where
   stateMessageM SelectingSize{..} = Edit <$> do
     availableSizes <- asks availableSizes
     return $
@@ -97,7 +94,7 @@ data SelectingToppings = SelectingToppings
   { size :: PizzaSize
   , toppings :: [Topping]
   }
-instance MonadReader PizzaContext m => IsStateM m SelectingToppings where
+instance MonadReader PizzaContext m => StateMessageM m SelectingToppings where
   stateMessageM SelectingToppings{toppings=selectedToppings} = Edit <$> do
     availableToppings <- asks availableToppings
     return $
@@ -118,23 +115,23 @@ instance HandleTransition StartSelectingSize InitialState SelectingSize0 where
   handleTransition _ _ = SelectingSize0
 
 newtype SelectSize = SelectSize { size :: PizzaSize }
-  deriving stock (Show, Read)
-  deriving IsCallbackData via ReadShow SelectSize
+  deriving (Show, Read)
+  deriving IsCallbackQuery via ReadShow SelectSize
   deriving ParseTransition via CallbackQueryData SelectSize
 instance HandleTransition SelectSize s SelectingSize where
   handleTransition (SelectSize size) _ = SelectingSize size
 
 newtype AddTopping = AddTopping Topping
-  deriving stock (Show, Read)
-  deriving IsCallbackData via ReadShow AddTopping
+  deriving (Show, Read)
+  deriving IsCallbackQuery via ReadShow AddTopping
   deriving ParseTransition via CallbackQueryData AddTopping
 instance HandleTransition AddTopping SelectingToppings SelectingToppings where
   handleTransition (AddTopping topping) SelectingToppings{toppings, ..} =
     SelectingToppings{toppings = topping:toppings, ..}
 
 newtype RemoveTopping = RemoveTopping Topping
-  deriving stock (Show, Read)
-  deriving IsCallbackData via ReadShow RemoveTopping
+  deriving (Show, Read)
+  deriving IsCallbackQuery via ReadShow RemoveTopping
   deriving ParseTransition via CallbackQueryData RemoveTopping
 instance HandleTransition RemoveTopping SelectingToppings SelectingToppings where
   handleTransition (RemoveTopping topping) SelectingToppings{toppings, ..} =
@@ -142,7 +139,7 @@ instance HandleTransition RemoveTopping SelectingToppings SelectingToppings wher
 
 data Confirm = Confirm
   deriving (Read, Show, Generic, IsUnit)
-  deriving IsCallbackData via ReadShow Confirm
+  deriving IsCallbackQuery via ReadShow Confirm
   deriving ParseTransition via (CommandUnit "confirm" `Or` CallbackQueryData) Confirm
 
 confirmButton :: InlineKeyboardButton
