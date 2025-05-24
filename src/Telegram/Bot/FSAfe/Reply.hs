@@ -62,7 +62,7 @@ toReplyMessage Message{..}
 
 toEditMessage :: Message -> EditMessage
 toEditMessage Message{..}
-  = EditMessage messageText messageParseMode messageLinkPreviewOptions messageReplyMarkup
+  = EditMessage messageText messageParseMode messageLinkPreviewOptions messageReplyMarkup messageEntities
 
 replyMessageToSendMessageRequest :: SomeChatId -> ReplyMessage -> SendMessageRequest
 replyMessageToSendMessageRequest someChatId ReplyMessage{..} = SendMessageRequest
@@ -97,10 +97,11 @@ replyText :: MonadBot m => Text -> m ()
 replyText = reply . toReplyMessage . textMessage
 
 data EditMessage = EditMessage
-  { editMessageText                  :: Text
-  , editMessageParseMode             :: Maybe ParseMode
-  , editMessageLinkPreviewOptions    :: Maybe LinkPreviewOptions
-  , editMessageReplyMarkup           :: Maybe SomeReplyMarkup
+  { editMessageText               :: Text
+  , editMessageParseMode          :: Maybe ParseMode
+  , editMessageLinkPreviewOptions :: Maybe LinkPreviewOptions
+  , editMessageReplyMarkup        :: Maybe SomeReplyMarkup
+  , editMessageEntities           :: Maybe [MessageEntity]
   }
 
 data EditMessageId
@@ -115,7 +116,7 @@ editMessageToEditMessageTextRequest editMessageId EditMessage{..}
     , editMessageTextParseMode = editMessageParseMode
     , editMessageTextLinkPreviewOptions = editMessageLinkPreviewOptions
     , editMessageTextReplyMarkup = editMessageReplyMarkup
-    , editMessageEntities = Nothing
+    , editMessageEntities = editMessageEntities
     , ..
     }
   where

@@ -10,7 +10,7 @@
 module Main (main) where
 
 import qualified Data.Text as T
-import Telegram.Bot.API as Tg (updateChatId, InlineKeyboardMarkup (..), SomeReplyMarkup (SomeInlineKeyboardMarkup))
+import Telegram.Bot.API as Tg (updateChatId, InlineKeyboardButton)
 import Telegram.Bot.DSL
   ( IsUnit(..), ReadShow(..)
   , IsCallbackData
@@ -22,11 +22,13 @@ import Data.Proxy (Proxy(..))
 import Control.Monad.Reader (ReaderT(..), Reader, runReader, MonadReader (..), asks)
 
 import Telegram.Bot.FSAfe.Start (getEnvToken, hoistStartKeyedBot_)
-import Telegram.Bot.FSAfe.Message (Message(..), textMessage, MessageShowMode(..))
+import Telegram.Bot.FSAfe.Message
+  (textMessage, MessageShowMode(..), withInlineKeyboard, row, single)
 import Telegram.Bot.FSAfe.FSA
   ( HandleTransition(..), IsState(..)
   , ParseTransition, CallbackQueryData(..), CommandUnit(..), Or(..), IsStateM (..)
   )
+import Data.Function ((&))
 
 tshow :: Show a => a -> T.Text
 tshow = T.pack . show
@@ -63,42 +65,51 @@ newtype ConfirmingOrder = ConfirmingOrder
   { pizza :: PizzaOrder }
 instance IsState ConfirmingOrder where
   stateMessage ConfirmingOrder{..} = Edit $
-    (textMessage $ tshow pizza)
-      { messageReplyMarkup = Just $ SomeInlineKeyboardMarkup $ InlineKeyboardMarkup
-        [[callbackButton "Confirm" Confirm]] }
+    textMessage (tshow pizza)
+    & withInlineKeyboard (single confirmButton)
 
 data SelectingSize0 = SelectingSize0
 instance MonadReader PizzaContext m => IsStateM m SelectingSize0 where
   stateMessageM SelectingSize0 = Send <$> do
     availableSizes <- asks availableSizes
-    pure $ (textMessage "Please, select size of your pizza:")
-      { messageReplyMarkup = Just $ SomeInlineKeyboardMarkup $ InlineKeyboardMarkup
-        [(\size -> callbackButton (tshow size) (SelectSize size)) <$> availableSizes] }
+    return $
+      textMessage "Please, select size of your pizza:"
+      & withInlineKeyboard
+        (row $ map selectSizeButton availableSizes)
+    where
+      selectSizeButton size = callbackButton (tshow size) (SelectSize size)
 
 newtype SelectingSize = SelectingSize
   { selectedSize :: PizzaSize }
 instance MonadReader PizzaContext m => IsStateM m SelectingSize where
   stateMessageM SelectingSize{..} = Edit <$> do
     availableSizes <- asks availableSizes
-    pure $ (textMessage $ "You selected " <> tshow selectedSize <> " size")
-      {messageReplyMarkup = Just $ SomeInlineKeyboardMarkup $ InlineKeyboardMarkup $
-       ((\size -> callbackButton (tshow size) (SelectSize size)) <$> filter (/= selectedSize) availableSizes)
-       : [[callbackButton "Confirm" Confirm]] }
+    return $
+      textMessage ("You selected " <> tshow selectedSize <> " size")
+      & withInlineKeyboard
+        [ row $ map selectSizeButton $ filter (/= selectedSize) availableSizes
+        , single confirmButton
+        ]
+    where
+      selectSizeButton size = callbackButton (tshow size) (SelectSize size)
 
 data SelectingToppings = SelectingToppings
   { size :: PizzaSize
   , toppings :: [Topping]
   }
 instance MonadReader PizzaContext m => IsStateM m SelectingToppings where
-  stateMessageM SelectingToppings{..} = Edit <$> do
+  stateMessageM SelectingToppings{toppings=selectedToppings} = Edit <$> do
     availableToppings <- asks availableToppings
-    pure $ (textMessage "Please, select toppings for your pizza:")
-      {messageReplyMarkup = Just $ SomeInlineKeyboardMarkup $ InlineKeyboardMarkup
-        [f <$> availableToppings, [callbackButton "Confirm" Confirm]]}
-      where
-        f s = if s `elem` toppings
-          then callbackButton ("✓" <> tshow s) (RemoveTopping s)
-          else callbackButton (tshow s) (AddTopping s)
+    return $
+      textMessage "Please, select toppings for your pizza:"
+      & withInlineKeyboard
+        [ row $ map selectToppingButton availableToppings
+        , single confirmButton
+        ]
+    where
+      selectToppingButton topping = if topping `elem` selectedToppings
+        then callbackButton ("✓" <> tshow topping) (RemoveTopping topping)
+        else callbackButton (       tshow topping) (AddTopping topping)
 
 data StartSelectingSize = StartSelectingSize
   deriving (Generic, IsUnit)
@@ -133,10 +144,16 @@ data Confirm = Confirm
   deriving (Read, Show, Generic, IsUnit)
   deriving IsCallbackData via ReadShow Confirm
   deriving ParseTransition via (CommandUnit "confirm" `Or` CallbackQueryData) Confirm
+
+confirmButton :: InlineKeyboardButton
+confirmButton = callbackButton "Confirm" Confirm
+
 instance HandleTransition Confirm SelectingSize SelectingToppings where
   handleTransition Confirm (SelectingSize size) = SelectingToppings size []
+
 instance HandleTransition Confirm SelectingToppings ConfirmingOrder where
   handleTransition Confirm SelectingToppings{..} = ConfirmingOrder PizzaOrder{..}
+
 instance HandleTransition Confirm ConfirmingOrder InitialState where
   handleTransition Confirm ConfirmingOrder{} = InitialState
 
