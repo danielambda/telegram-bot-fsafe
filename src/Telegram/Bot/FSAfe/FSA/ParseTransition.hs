@@ -17,10 +17,9 @@ import GHC.TypeLits (Symbol, KnownSymbol, symbolVal)
 
 import qualified Data.Text as T
 
-import Telegram.Bot.DSL.Classes.IsUnit (IsUnit (..))
-
 import Telegram.Bot.FSAfe.BotContextParser (BotContextParser, command, callbackQueryDataRead)
 import Telegram.Bot.FSAfe.Message.ReplyMarkup.IsCallbackQuery (IsCallbackQuery(..))
+import Telegram.Bot.FSAfe.Utils (IsUnit (..))
 
 class ParseTransition t where
   parseTransition :: BotContextParser t

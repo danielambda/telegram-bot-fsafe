@@ -21,6 +21,7 @@ library
       Telegram.Bot.FSAfe.RunTG
       Telegram.Bot.FSAfe.Start
       Telegram.Bot.FSAfe.Start.Internal
+      Telegram.Bot.FSAfe.Utils
   other-modules:
       Paths_telegram_bot_fsafe
   hs-source-dirs:
@@ -41,7 +42,6 @@ library
     , stm
     , tagged
     , telegram-bot-api
-    , telegram-bot-message-dsl
     , text
     , unordered-containers
   default-language: GHC2021
@@ -58,6 +58,5 @@ executable telegram-bot-fsafe-example
     , mtl
     , telegram-bot-api
     , telegram-bot-fsafe
-    , telegram-bot-message-dsl
     , text
   default-language: GHC2021

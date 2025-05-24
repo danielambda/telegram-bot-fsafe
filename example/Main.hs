@@ -11,7 +11,6 @@ module Main (main) where
 
 import qualified Data.Text as T
 import Telegram.Bot.API as Tg (updateChatId, InlineKeyboardButton)
-import Telegram.Bot.DSL (IsUnit(..))
 
 import GHC.Generics (Generic)
 import Data.Function ((&))
@@ -22,11 +21,12 @@ import Telegram.Bot.FSAfe.Start (getEnvToken, hoistStartKeyedBot_)
 import Telegram.Bot.FSAfe.Message (textMessage, MessageShowMode(..), withInlineKeyboard)
 import Telegram.Bot.FSAfe.Message.ReplyMarkup (row, single)
 import Telegram.Bot.FSAfe.Message.ReplyMarkup.IsCallbackQuery
-  (IsCallbackQuery(..), ReadShow(..), callbackButton)
+  (IsCallbackQuery(..), callbackButton)
 import Telegram.Bot.FSAfe.FSA.StateMessage (StateMessage(..), StateMessageM(..))
 import Telegram.Bot.FSAfe.FSA.ParseTransition
   (ParseTransition, CallbackQueryData(..), CommandUnit(..), Or(..))
 import Telegram.Bot.FSAfe.FSA.HandleTransition (HandleTransition(..))
+import Telegram.Bot.FSAfe.Utils (ReadShow(..), IsUnit)
 
 tshow :: Show a => a -> T.Text
 tshow = T.pack . show

@@ -68,24 +68,7 @@
       "inputs": {
         "flake-parts": "flake-parts",
         "haskell-flake": "haskell-flake",
-        "nixpkgs": "nixpkgs",
-        "telegram-bot-message-dsl": "telegram-bot-message-dsl"
-      }
-    },
-    "telegram-bot-message-dsl": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1747743750,
-        "narHash": "sha256-Vkhima7lLOVHIg1daboCQlCHbdB4vny3OMoTeXcIkmU=",
-        "owner": "danielambda",
-        "repo": "telegram-bot-message-dsl",
-        "rev": "0fecdff69fdb74918900eb7c928037f830616d6f",
-        "type": "github"
-      },
-      "original": {
-        "owner": "danielambda",
-        "repo": "telegram-bot-message-dsl",
-        "type": "github"
+        "nixpkgs": "nixpkgs"
       }
     }
   },
