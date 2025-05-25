@@ -23,6 +23,7 @@ import System.Environment (getEnv)
 import Telegram.Bot.FSAfe.BotM (BotContext(..), runBotM, BotM)
 import Telegram.Bot.FSAfe.FSA (SomeState(..), HasState)
 import Telegram.Bot.FSAfe.Start.Internal (tryAdvanceState, startBotGeneric)
+import Data.Functor ((<&>))
 
 getEnvToken :: String -> IO Tg.Token
 getEnvToken = fmap fromString . getEnv
@@ -43,7 +44,7 @@ hoistStartBot_ fsa nt state token = void $ hoistStartBot fsa nt state token
 hoistStartBot
   :: forall fsa a m. (HasState a fsa m)
   => Proxy fsa -> (forall x. m x -> BotM x) -> a -> Tg.Token -> IO (Either ClientError ())
-hoistStartBot _ nt = startBotGeneric updateState . SomeState @a @fsa
+hoistStartBot _ nt a = startBotGeneric updateState (SomeState @a @fsa a, Nothing)
   where
   updateState botUser state update =
     runBotM (tryAdvanceState nt state) (BotContext botUser update)
@@ -81,7 +82,7 @@ hoistStartKeyedBot
   :: forall fsa a key m. (Hashable key, HasState a fsa m)
   => Proxy fsa
   -> (forall x. m x -> BotM x)
-  -> (Tg.Update -> Maybe key)
+  -> (Tg.Update -> key)
   -> a
   -> Tg.Token
   -> IO (Either ClientError ())
@@ -89,9 +90,9 @@ hoistStartKeyedBot _ nt toKey initialState = startBotGeneric updateStateMap HM.e
   where
   updateStateMap botUser stateMap update = do
     let key = toKey update
-    let defState = SomeState @a @fsa initialState
+    let defState = (SomeState @a @fsa initialState, Nothing)
     let state = stateMap & HM.lookupDefault defState key
-    runBotM (tryAdvanceState nt state) (BotContext botUser update) >>= \case
-      Just nextState -> return $ Just $ stateMap & HM.insert key nextState
-      Nothing -> return $ Just stateMap
+    runBotM (tryAdvanceState nt state) (BotContext botUser update) <&> Just . \case
+      Just nextState -> stateMap & HM.insert key nextState
+      Nothing -> stateMap
 

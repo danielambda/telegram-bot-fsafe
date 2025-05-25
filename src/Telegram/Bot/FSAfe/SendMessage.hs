@@ -13,6 +13,7 @@ module Telegram.Bot.FSAfe.SendMessage
   , sendIn, sendIn_
   , sendText, sendText_
   , edit, edit_
+  , editInThisChat, editInThisChat_
   ) where
 
 import Data.Text (Text)
@@ -25,7 +26,7 @@ import Data.Foldable (traverse_)
 
 import Telegram.Bot.FSAfe.BotM (BotContext(..), MonadBot (..))
 import Telegram.Bot.FSAfe.RunTG (runTG)
-import Telegram.Bot.FSAfe.Message (Message(..), textMessage, EditMessageId, toSendMessageRequest, toEditMessageTextRequest)
+import Telegram.Bot.FSAfe.Message (Message(..), textMessage, EditMessageId (..), toSendMessageRequest, toEditMessageTextRequest)
 import Control.Monad (void)
 
 answerCallbackQuery :: MonadBot m => m ()
@@ -66,3 +67,13 @@ edit emsgId =
 
 edit_ :: MonadBot m => EditMessageId -> Message -> m ()
 edit_ = fmap void . edit
+
+editInThisChat :: MonadBot m => MessageId -> Message -> m EditMessageResponse
+editInThisChat msgId msg = do
+  mchatId <- liftBot currentChatId
+  case mchatId of
+    Just chatId -> edit (EditChatMessageId (SomeChatId chatId) msgId) msg
+    Nothing     -> liftIO $ putStrLn "No chat to reply to" >> pure undefined
+
+editInThisChat_ :: MonadBot f => MessageId -> Message -> f ()
+editInThisChat_ msgId msg = void $ editInThisChat msgId msg

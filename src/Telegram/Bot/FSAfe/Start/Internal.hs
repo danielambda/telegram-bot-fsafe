@@ -35,23 +35,29 @@ import Telegram.Bot.FSAfe.FSA.HandleTransition (HandleTransitionM(..))
 import Telegram.Bot.FSAfe.FSA (SomeTransitionFrom(..), SomeState(..), parseSomeTransition)
 import Telegram.Bot.FSAfe.FSA.StateMessage (StateMessageM(..))
 import Telegram.Bot.FSAfe.Message (ShowMode(..))
-import Telegram.Bot.FSAfe.SendMessage (send_, answerCallbackQuery)
+import Telegram.Bot.FSAfe.SendMessage (answerCallbackQuery, send, editInThisChat_)
 
 tryAdvanceState :: forall fsa m.
-  (forall x. m x -> BotM x) -> SomeState fsa m -> BotM (SomeState fsa m)
-tryAdvanceState nt (SomeState s) = do
+     (forall x. m x -> BotM x)
+  ->      (SomeState fsa m, Maybe Tg.MessageId)
+  -> BotM (SomeState fsa m, Maybe Tg.MessageId)
+tryAdvanceState nt (SomeState s, mMsgId) = do
   botCtx <- ask
   case parseSomeTransition @_ @fsa @m s botCtx of
-    Nothing -> pure $ SomeState s
+    Nothing -> pure (SomeState s, mMsgId)
     Just (SomeTransition @_ @s @t @s' t) -> do
       when (automaticallyHandleCallbackQueries @t @s @s' @m)
         answerCallbackQuery
       s' <- nt $ handleTransitionM t s
-      nt (stateMessageM s') >>= \case
-        NoMessage -> pure ()
-        Send msg -> send_ msg
-        Edit msg -> send_ msg -- TODO
-      return $ SomeState s'
+      msgId <- nt (stateMessageM s') >>= \case
+        NoMessage -> pure mMsgId
+        Send msg -> Just . Tg.messageMessageId <$> send msg
+        Edit msg -> case mMsgId of
+          Just msgId -> do
+            editInThisChat_ msgId msg
+            pure $ Just msgId
+          Nothing -> Just . Tg.messageMessageId <$> send msg
+      return (SomeState s', msgId)
 
 startBotGeneric
   :: (Tg.User -> state -> Tg.Update -> ClientM (Maybe state))
