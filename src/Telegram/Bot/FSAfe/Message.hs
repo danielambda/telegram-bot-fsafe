@@ -16,7 +16,7 @@ module Telegram.Bot.FSAfe.Message
   , EditMessageId(..)
   , textMessage
   , toSendMessageRequest, toEditMessageTextRequest
-  , withInlineKeyboard
+  , withInlineKeyboard, withParseMode
   ) where
 
 import Telegram.Bot.FSAfe.Message.ReplyMarkup as Exports
@@ -103,3 +103,6 @@ withInlineKeyboard :: IsInlineKeyboardMarkup a => a -> Message -> Message
 withInlineKeyboard keyboard msg =
   msg{messageReplyMarkup = Just $ SomeInlineKeyboardMarkup $ toInlineKeyboardMarkup keyboard}
 
+withParseMode :: ParseMode -> Message -> Message
+withParseMode parseMode msg =
+  msg{messageParseMode = Just parseMode}
