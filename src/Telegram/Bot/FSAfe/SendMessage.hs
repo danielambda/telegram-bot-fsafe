@@ -10,7 +10,7 @@
 {-# LANGUAGE LambdaCase #-}
 
 module Telegram.Bot.FSAfe.SendMessage
-  ( getChatId, getMessageId, getMessageEditMessageId
+  ( getChatId, getMessageId, getEditMessageId
   , answerCallbackQuery
   , send, send_
   , sendIn, sendIn_
@@ -26,6 +26,7 @@ import Data.Text (Text)
 import Telegram.Bot.API hiding (Message, editMessageText, editMessageReplyMarkup, answerCallbackQuery)
 import qualified Telegram.Bot.API as Tg (Message)
 
+import Control.Applicative ((<|>))
 import Control.Monad (void)
 import Control.Monad.Reader (asks)
 import Data.Foldable (traverse_)
@@ -41,14 +42,21 @@ answerCallbackQuery = liftBot $
     (runTG . defAnswerCallbackQuery . callbackQueryId)
 
 getChatId :: MonadBot m => m (Maybe ChatId)
-getChatId = liftBot $ asks $ updateChatId . botContextUpdate
+getChatId = liftBot $ asks $ \botCtx
+  ->  updateChatId (botContextUpdate botCtx)
+  <|> fmap (chatId . messageChat) (extractUpdateMessage $ botContextUpdate botCtx)
 
 getMessageId :: MonadBot m => m (Maybe MessageId)
-getMessageId = liftBot $ asks $ fmap messageMessageId . updateMessage . botContextUpdate
+getMessageId = liftBot $ asks $ fmap messageMessageId . extractUpdateMessage . botContextUpdate
 
-getMessageEditMessageId :: MonadBot m => m (Maybe EditMessageId)
-getMessageEditMessageId =
-  liftA2 EditChatMessageId . fmap SomeChatId <$> getChatId <*> getMessageId
+getEditMessageId :: MonadBot m => m (Maybe EditMessageId)
+getEditMessageId = do
+  update <- liftBot $ asks botContextUpdate
+  let message = extractUpdateMessage update
+  return
+    $   EditInlineMessageId <$> (callbackQueryInlineMessageId =<< updateCallbackQuery update)
+    <|>     (EditChatMessageId . SomeChatId . chatId . messageChat <$> message)
+        <*> (messageMessageId <$> message)
 
 sendIn :: MonadBot m => SomeChatId -> Message -> m Tg.Message
 sendIn someChatId rmsg = do
@@ -91,16 +99,16 @@ editInThisChat_ msgId msg = void $ editInThisChat msgId msg
 
 editUpdateMessage :: MonadBot m => Message -> m EditMessageResponse
 editUpdateMessage msg =
-  getMessageId >>= \case
-    Just msgId -> editInThisChat msgId msg
-    Nothing    -> liftBot $ fail "No message to edit"
+  getEditMessageId >>= \case
+    Just editMsgId -> edit editMsgId msg
+    Nothing        -> liftBot $ fail "No message to edit"
 
 editUpdateMessage_ :: MonadBot m => Message -> m ()
 editUpdateMessage_ = void . editUpdateMessage_
 
 editUpdateMessageReplyMarkup :: MonadBot m => SomeReplyMarkup -> m EditMessageResponse
 editUpdateMessageReplyMarkup replyMarkup = do
-  getMessageEditMessageId >>= \case
+  getEditMessageId >>= \case
     Just editMsgId -> editReplyMarkup editMsgId replyMarkup
     Nothing -> liftBot $ fail "No message to edit"
 
