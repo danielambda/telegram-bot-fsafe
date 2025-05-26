@@ -29,8 +29,8 @@ instance MonadFail BotM where
   fail _ = throwError ()
 
 data BotContext = BotContext
-  { botContextUser      :: Tg.User
-  , botContextUpdate    :: Tg.Update
+  { botContextUser   :: Tg.User
+  , botContextUpdate :: Tg.Update
   }
 
 runBotM :: BotM a -> BotContext -> ClientM (Maybe a)

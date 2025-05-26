@@ -9,9 +9,12 @@
 
 module Telegram.Bot.FSAfe.RunTG where
 
-import Telegram.Bot.API
 import Data.Text (Text)
 import Servant.Client (ClientM)
+import Telegram.Bot.API
+
+import Control.Monad (void)
+
 import Telegram.Bot.FSAfe.BotM (liftClientM, MonadBot)
 
 -- * 'RunTG'
@@ -21,6 +24,9 @@ import Telegram.Bot.FSAfe.BotM (liftClientM, MonadBot)
 -- E.g. instead of invoking @liftClientM $ methodName MethodNameRequest {..}@, you just need to specify @runTG $ defMethodName params@. See @examples@ for more details.
 class RunTG a b | a -> b where
   runTG :: MonadBot m => a -> m b
+
+runTG_ :: (MonadBot m, RunTG a b) => a -> m ()
+runTG_ = void . runTG
 
 -- ** Instances
 
