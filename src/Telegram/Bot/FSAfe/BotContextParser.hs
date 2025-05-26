@@ -13,7 +13,7 @@ module Telegram.Bot.FSAfe.BotContextParser
   ( BotContextParser, mkBotContextParser, runBotContextParser
   , text, plainText
   , command
-  , callbackQueryDataRead
+  , callbackQueryDataRead, callbackQueryDataReadWith
   ) where
 
 import qualified Data.Text as T
@@ -26,7 +26,7 @@ import Control.Monad.Reader (ReaderT(..), asks)
 import Data.Char (isSpace)
 
 import Telegram.Bot.FSAfe.BotM (BotContext (..))
-import Telegram.Bot.FSAfe.Message.ReplyMarkup.IsCallbackQuery (IsCallbackQuery(..))
+import Telegram.Bot.FSAfe.Message.ReplyMarkup.IsCallbackQuery (IsCallbackQuery(..), IsCallbackQueryWith (..))
 
 type BotContextParser a = ReaderT BotContext Maybe a
 
@@ -59,10 +59,16 @@ command commandName = do
     then pure $ T.stripStart rest
     else fail "not that command"
 
--- | Obtain 'CallbackQuery' @data@ associated with the callback button in an inline keyboard if present in 'Update' message.
 callbackQueryDataRead :: IsCallbackQuery a => BotContextParser a
 callbackQueryDataRead = mkBotContextParser
   $   fromCallbackQueryData
+  <=< callbackQueryData
+  <=< updateCallbackQuery
+  .   botContextUpdate
+
+callbackQueryDataReadWith :: IsCallbackQueryWith r a => r -> BotContextParser a
+callbackQueryDataReadWith r = mkBotContextParser
+  $   fromCallbackQueryDataWith r
   <=< callbackQueryData
   <=< updateCallbackQuery
   .   botContextUpdate

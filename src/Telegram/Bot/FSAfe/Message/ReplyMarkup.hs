@@ -25,7 +25,7 @@ instance (Foldable f, IsInlineKeyboardMarkup a) => IsInlineKeyboardMarkup (f a) 
     . toList
 
 single :: InlineKeyboardButton -> InlineKeyboardMarkup
-single button = InlineKeyboardMarkup [[button]]
+single btn = InlineKeyboardMarkup [[btn]]
 
 col :: Foldable t => t InlineKeyboardButton -> InlineKeyboardMarkup
 col = InlineKeyboardMarkup . map (:[]) . toList

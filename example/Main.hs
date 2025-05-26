@@ -20,7 +20,7 @@ import Control.Monad.Reader (ReaderT(..), Reader, runReader, MonadReader (..), a
 -- import Telegram.Bot.FSAfe.Message (textMessage, ShowMode(..), withInlineKeyboard)
 -- import Telegram.Bot.FSAfe.Message.ReplyMarkup (row, single)
 -- import Telegram.Bot.FSAfe.Message.ReplyMarkup.IsCallbackQuery
---   (IsCallbackQuery(..), callbackButton)
+--   (IsCallbackQuery(..), button)
 -- import Telegram.Bot.FSAfe.FSA.StateMessage (StateMessage(..), StateMessageM(..))
 -- import Telegram.Bot.FSAfe.FSA.ParseTransition
 --   (ParseTransition, CallbackQueryData(..), CommandUnit(..), Or(..))
@@ -74,7 +74,7 @@ instance MonadReader PizzaContext m => StateMessageM m SelectingSize0 where
       & withInlineKeyboard
         (row $ map selectSizeButton availableSizes)
     where
-      selectSizeButton size = callbackButton (tshow size) (SelectSize size)
+      selectSizeButton size = button (tshow size) (SelectSize size)
 
 newtype SelectingSize = SelectingSize
   { selectedSize :: PizzaSize }
@@ -88,7 +88,7 @@ instance MonadReader PizzaContext m => StateMessageM m SelectingSize where
         , single confirmButton
         ]
     where
-      selectSizeButton size = callbackButton (tshow size) (SelectSize size)
+      selectSizeButton size = button (tshow size) (SelectSize size)
 
 data SelectingToppings = SelectingToppings
   { size :: PizzaSize
@@ -105,8 +105,8 @@ instance MonadReader PizzaContext m => StateMessageM m SelectingToppings where
         ]
     where
       selectToppingButton topping = if topping `elem` selectedToppings
-        then callbackButton ("✓" <> tshow topping) (RemoveTopping topping)
-        else callbackButton (       tshow topping) (AddTopping topping)
+        then button ("✓" <> tshow topping) (RemoveTopping topping)
+        else button (       tshow topping) (AddTopping topping)
 
 data Start = Start
   deriving (Generic, IsUnit)
@@ -149,7 +149,7 @@ data Confirm = Confirm
   deriving ParseTransition via (CommandUnit "confirm" `Or` CallbackQueryData) Confirm
 
 confirmButton :: InlineKeyboardButton
-confirmButton = callbackButton "Confirm" Confirm
+confirmButton = button "Confirm" Confirm
 
 instance HandleTransition Confirm SelectingSize SelectingToppings where
   handleTransition Confirm (SelectingSize size) = SelectingToppings size []
