@@ -104,7 +104,7 @@ editUpdateMessage msg =
     Nothing        -> liftBot $ fail "No message to edit"
 
 editUpdateMessage_ :: MonadBot m => Message -> m ()
-editUpdateMessage_ = void . editUpdateMessage_
+editUpdateMessage_ = void . editUpdateMessage
 
 editUpdateMessageReplyMarkup :: MonadBot m => SomeReplyMarkup -> m EditMessageResponse
 editUpdateMessageReplyMarkup replyMarkup = do
