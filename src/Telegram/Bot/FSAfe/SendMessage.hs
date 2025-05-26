@@ -14,13 +14,13 @@ module Telegram.Bot.FSAfe.SendMessage
   , sendText, sendText_
   , edit, edit_
   , editInThisChat, editInThisChat_
+  , editUpdateMessage, editUpdateMessage_
   ) where
 
 import Data.Text (Text)
 import Telegram.Bot.API hiding (Message, editMessageText, editMessageReplyMarkup, answerCallbackQuery)
 import qualified Telegram.Bot.API as Tg (Message)
 
-import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Reader (asks)
 import Data.Foldable (traverse_)
 
@@ -50,7 +50,7 @@ send rmsg = do
   mchatId <- liftBot currentChatId
   case mchatId of
     Just chatId -> sendIn (SomeChatId chatId) rmsg
-    Nothing     -> liftIO $ putStrLn "No chat to reply to" >> pure undefined
+    Nothing     -> liftBot $ fail "No chat to reply to"
 
 send_ :: MonadBot m => Message -> m ()
 send_ = void . send
@@ -73,7 +73,17 @@ editInThisChat msgId msg = do
   mchatId <- liftBot currentChatId
   case mchatId of
     Just chatId -> edit (EditChatMessageId (SomeChatId chatId) msgId) msg
-    Nothing     -> liftIO $ putStrLn "No chat to reply to" >> pure undefined
+    Nothing     -> liftBot $ fail "No chat to reply to"
 
 editInThisChat_ :: MonadBot f => MessageId -> Message -> f ()
 editInThisChat_ msgId msg = void $ editInThisChat msgId msg
+
+editUpdateMessage :: MonadBot m => Message -> m EditMessageResponse
+editUpdateMessage msg = do
+  mmsgId <- liftBot $ asks $ fmap messageMessageId . updateMessage . botContextUpdate
+  case mmsgId of
+    Just msgId -> editInThisChat msgId msg
+    Nothing    -> liftBot $ fail "No message to edit"
+
+editUpdateMessage_ :: MonadBot m => Message -> m ()
+editUpdateMessage_ = void . editUpdateMessage_
